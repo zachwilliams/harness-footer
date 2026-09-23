@@ -1,0 +1,7 @@
+{
+  "warn_tokens": 150000,
+  "target_tokens": 200000,
+  "head_width": 10,
+  "tail_width": 5,
+  "claude_show_builtin_status": true
+}
