@@ -73,8 +73,8 @@ def tmux(*args):
 def configure(app, token):
     pane = os.environ['TMUX_PANE']
     session = tmux('display-message', '-p', '-t', pane, '#{session_id}')
-    tmux('set-option', '-p', '-t', pane, '@agent-footer-app', app)
-    tmux('set-option', '-p', '-t', pane, '@agent-footer-token', token)
+    tmux('set-option', '-p', '-t', pane, '@harness-footer-app', app)
+    tmux('set-option', '-p', '-t', pane, '@harness-footer-token', token)
     command = (f'{shlex.quote(PYTHON)} {shlex.quote(str(ROOT / "footer.py"))}'
                ' --socket #{q:socket_path} --pane #{pane_id} --width #{client_width}')
     options = {'status': 'on', 'status-position': 'bottom', 'status-interval': '2',
@@ -136,7 +136,7 @@ def claude_args(args, token):
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
-        print('Usage: agent-tmux {codex|claude} [CLI arguments]')
+        print('Usage: harness-footer {codex|claude} [CLI arguments]')
         return
     app, *args = sys.argv[1:]
     if app not in SUBCOMMANDS:
@@ -164,7 +164,7 @@ def main():
                 'COLORTERM', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'XDG_CACHE_HOME', 'PATH']:
         if key in os.environ:
             environment += ['-e', f'{key}={os.environ[key]}']
-    os.execv(TMUX, [TMUX, '-L', 'agent-footer', '-f', str(ROOT / 'tmux.conf'),
+    os.execv(TMUX, [TMUX, '-L', 'harness-footer', '-f', str(ROOT / 'tmux.conf'),
                    'new-session', '-s', session, '-c', os.getcwd(), *environment, command])
 
 

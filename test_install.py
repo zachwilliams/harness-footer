@@ -11,6 +11,15 @@ import install
 
 
 class InstallTests(unittest.TestCase):
+    def test_previous_project_name_is_migrated(self):
+        with tempfile.TemporaryDirectory() as temp:
+            rc = Path(temp) / '.zshrc'
+            rc.write_text('# >>> agent-tmux >>>\n. /old/activate.sh\n# <<< agent-tmux <<<\n')
+            install.connect_shell(Path(temp) / 'activate.sh', rc)
+            self.assertNotIn('agent-tmux', rc.read_text())
+            self.assertNotIn('/old/', rc.read_text())
+            self.assertEqual(rc.read_text().count(install.BEGIN), 1)
+
     def test_shell_connection_is_idempotent_and_backs_up_existing_config(self):
         with tempfile.TemporaryDirectory() as temp:
             rc = Path(temp) / '.zshrc'
@@ -38,7 +47,7 @@ class InstallTests(unittest.TestCase):
             install.install(prefix)
             self.assertEqual(json.loads((target / 'settings.json').read_text()), custom)
             self.assertEqual(subprocess.check_output([str(wrapper), '--help'], text=True).strip(),
-                             'Usage: agent-tmux {codex|claude} [CLI arguments]')
+                             'Usage: harness-footer {codex|claude} [CLI arguments]')
             fake_bin = Path(temp) / 'fake-bin'
             fake_bin.mkdir()
             for app in ('codex', 'claude'):

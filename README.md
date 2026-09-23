@@ -1,4 +1,4 @@
-# agent-tmux
+# harness-footer
 
 A shared, pinned tmux status bar for Codex CLI and Claude Code. Plain Python,
 no Python packages, no model requests, and no persistent changes to agent settings.
@@ -30,16 +30,16 @@ The terminal demos and tests do not require either agent to be authenticated.
 ## Install
 
 Clone or unpack the project wherever you want to keep it, for example
-`~/.config/agent-tmux`, then run:
+`~/.config/harness-footer`, then run:
 
 ```sh
-cd ~/.config/agent-tmux
+cd ~/.config/harness-footer
 python3 install.py
 . ./activate.sh
 claude  # or codex
 ```
 
-The installer checks dependencies, creates `activate.sh` and `bin/agent-tmux`,
+The installer checks dependencies, creates `activate.sh` and `bin/harness-footer`,
 and adds a marked source block to your shell startup file. Zsh uses
 `${ZDOTDIR:-$HOME}/.zshrc`; Bash uses `~/.bashrc`. It backs up an existing startup
 file before editing and preserves your `settings.json`. Re-running updates the
@@ -59,18 +59,25 @@ python3 install.py --shell zsh --shell-rc ~/.config/zsh/.zshrc.local
 # Generate wrappers, with no automatic shell startup edit:
 python3 install.py --no-shell
 
-# Optional: install a separate runtime copy under ~/.local/share/agent-tmux:
+# Optional: install a separate runtime copy under ~/.local/share/harness-footer:
 python3 install.py --prefix ~/.local
 
 # Direct launch without sourcing shell functions:
-./bin/agent-tmux claude
-./bin/agent-tmux codex resume
+./bin/harness-footer claude
+./bin/harness-footer codex resume
 ```
 
 Use the activation path printed by the installer when installing a separate copy.
-With `--prefix`, the standalone command is in `PREFIX/bin/agent-tmux`.
+With `--prefix`, the standalone command is in `PREFIX/bin/harness-footer`.
 Already-running sessions continue running; edits to the renderer take effect at
 the next refresh, while launcher changes require a new session.
+
+When upgrading from the original `agent-tmux` name, the installer replaces its
+old marked shell block. Running tmux sessions can still read the old pane keys
+and usage cache. If you move the checkout while sessions are open, keep a symlink
+from the old checkout path to the new one until those sessions have exited.
+Sessions already running on the old `agent-footer` tmux server remain there;
+new launches use the `harness-footer` server.
 
 ## Configuration
 
@@ -119,7 +126,7 @@ Claude settings also works for future launches, but is unnecessary.
   cost. Extremely narrow layouts retain only the app and compact context display.
 - Each Claude launch gets a unique cache key, even with simultaneous sessions in
   the same directory. Normalized metrics are written atomically with mode 0600
-  under `~/.cache/agent-tmux` (or `$XDG_CACHE_HOME/agent-tmux`). No transcript
+  under `~/.cache/harness-footer` (or `$XDG_CACHE_HOME/harness-footer`). No transcript
   content or credentials are cached and the footer makes no API requests.
 - The renderer refreshes every two seconds; metrics change when each CLI reports
   usage. Git and directory information are rendered independently.
@@ -128,7 +135,7 @@ See [Claude's status-line data documentation](https://code.claude.com/docs/en/st
 
 ## Terminal behavior
 
-Each ordinary terminal pane gets its own tmux session on the `agent-footer`
+Each ordinary terminal pane gets its own tmux session on the `harness-footer`
 server. Continue using iTerm tabs and splits normally. In an existing tmux
 session, the status bar follows the active pane instead of nesting tmux.
 The status configuration is applied to that existing session.
@@ -136,8 +143,8 @@ The status configuration is applied to that existing session.
 Exiting the CLI returns to the original shell. Ctrl+B then D detaches; reattach:
 
 ```sh
-tmux -L agent-footer list-sessions
-tmux -L agent-footer attach-session -t claude-SESSION_ID
+tmux -L harness-footer list-sessions
+tmux -L harness-footer attach-session -t claude-SESSION_ID
 ```
 
 Help, version, administrative subcommands, `codex exec`, `claude -p`, redirected
@@ -154,7 +161,7 @@ rollout reader. Codex rollout schema changes may require reader updates.
 ## Verification
 
 ```sh
-cd ~/.config/agent-tmux
+cd ~/.config/harness-footer
 python3 -m unittest discover -v
 python3 test_tmux.py
 python3 footer.py --app codex --demo 173000 --plain
@@ -173,11 +180,11 @@ bytecode, and distribution archives are excluded from Git.
 
 ## Uninstall
 
-Remove the `# >>> agent-tmux >>>` through `# <<< agent-tmux <<<` block from the
+Remove the `# >>> harness-footer >>>` through `# <<< harness-footer <<<` block from the
 startup file reported by the installer, then open a new shell. To stop using the
 wrappers immediately, run `unset -f codex claude`. Your agent configurations are
 unchanged. You can then remove the checkout/runtime installation, its generated
-wrapper, and `~/.cache/agent-tmux` if you no longer need them.
+wrapper, and `~/.cache/harness-footer` if you no longer need them.
 
 ## License
 

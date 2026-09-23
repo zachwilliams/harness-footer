@@ -212,7 +212,7 @@ def render(state, cwd, git, config, width=200):
 
 
 def cache_dir():
-    return Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'agent-tmux'
+    return Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'harness-footer'
 
 
 def claude_state(data):
@@ -379,10 +379,14 @@ def main():
             if not args.socket or not re.fullmatch(r'%\d+', args.pane or ''):
                 raise ValueError('Pass --socket and --pane, or --rollout')
             info = run(['tmux', '-S', args.socket, 'display-message', '-p', '-t', args.pane,
-                        '#{pane_pid}\t#{pane_current_path}\t#{@agent-footer-app}\t#{@agent-footer-token}'])
+                        '#{pane_pid}\t#{pane_current_path}\t'
+                        '#{?@harness-footer-app,#{@harness-footer-app},#{@agent-footer-app}}\t'
+                        '#{?@harness-footer-token,#{@harness-footer-token},#{@agent-footer-token}}'])
             pid, cwd, app, token = info.split('\t')
             if app == 'claude' and re.fullmatch(r'[a-f0-9]{32}', token):
-                state = read_json(cache / f'claude-{token}.json') or {'app': 'claude'}
+                state = (read_json(cache / f'claude-{token}.json') or
+                         read_json(cache.parent / 'agent-tmux' / f'claude-{token}.json') or
+                         {'app': 'claude'})
             else:
                 path = rollout_for_pid(find_codex(int(pid)))
         if state is None:

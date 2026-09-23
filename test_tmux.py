@@ -12,7 +12,7 @@ import launch
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix='agent-footer-test-') as temp:
+    with tempfile.TemporaryDirectory(prefix='harness-footer-test-') as temp:
         root = Path(temp)
         socket = str(root / 'tmux.sock')
         bins = root / 'bin'
@@ -58,13 +58,13 @@ time.sleep(60)
                 panes.append((name, app, pane, tokens))
             deadline = time.monotonic() + 8
             while time.monotonic() < deadline:
-                if len(list((root / 'cache/agent-tmux').glob('claude-*.json'))) == 2 and (root / 'three.json').exists():
+                if len(list((root / 'cache/harness-footer').glob('claude-*.json'))) == 2 and (root / 'three.json').exists():
                     break
                 time.sleep(0.1)
             for name, app, pane, tokens in panes:
                 assert tmux('show-option', '-v', '-t', name, 'status-position') == 'bottom'
                 assert str(launch.ROOT / 'footer.py') in tmux('show-option', '-v', '-t', name, 'status-format[0]')
-                assert tmux('show-option', '-pv', '-t', pane, '@agent-footer-app') == app
+                assert tmux('show-option', '-pv', '-t', pane, '@harness-footer-app') == app
                 for width in [140, 80]:
                     tmux('resize-window', '-t', name, '-x', str(width), '-y', '30')
                     output = subprocess.check_output([
@@ -77,7 +77,23 @@ time.sleep(60)
                     assert len(output.strip('\n')) <= width, output
             codex_args = json.loads((root / 'three.json').read_text())
             assert codex_args == ['--no-daemon', '-c', 'tui.status_line=[]'], codex_args
-            print('PASS: isolated Claude sessions, Codex launch flags, app prefixes, bottom status, 140/80 columns')
+            # Sessions opened before the project rename retain their pane keys
+            # and cached usage until the next Claude status update.
+            pane = panes[0][2]
+            token = tmux('show-option', '-pv', '-t', pane, '@harness-footer-token')
+            tmux('set-option', '-p', '-t', pane, '@agent-footer-app', 'claude')
+            tmux('set-option', '-p', '-t', pane, '@agent-footer-token', token)
+            tmux('set-option', '-pu', '-t', pane, '@harness-footer-app')
+            tmux('set-option', '-pu', '-t', pane, '@harness-footer-token')
+            legacy = root / 'cache/agent-tmux'
+            legacy.mkdir()
+            (root / 'cache/harness-footer' / f'claude-{token}.json').rename(legacy / f'claude-{token}.json')
+            output = subprocess.check_output([
+                sys.executable, str(launch.ROOT / 'footer.py'), '--socket', socket,
+                '--pane', pane, '--plain'], text=True,
+                env=os.environ | {'XDG_CACHE_HOME': str(root / 'cache')})
+            assert '173K' in output and output.startswith(' claude'), output
+            print('PASS: isolated sessions, Codex flags, bottom status, 140/80 columns, legacy session compatibility')
         except Exception:
             for name, app, pane, tokens in panes:
                 print(name, tmux('capture-pane', '-p', '-t', pane))

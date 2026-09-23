@@ -132,7 +132,7 @@ class FooterTests(unittest.TestCase):
                                         input=raw, text=True, capture_output=True, check=True,
                                         env=os.environ | {'XDG_CACHE_HOME': temp})
                 self.assertEqual(json.loads(result.stdout)['session_id'], session)
-                cache = Path(temp) / 'agent-tmux' / f'claude-{token}.json'
+                cache = Path(temp) / 'harness-footer' / f'claude-{token}.json'
                 self.assertEqual(json.loads(cache.read_text())['session_id'], session)
                 self.assertEqual(cache.stat().st_mode & 0o777, 0o600)
 
@@ -145,7 +145,7 @@ class FooterTests(unittest.TestCase):
             claude_status.main()
             forward.assert_not_called()
             self.assertEqual(out.getvalue(), '')
-            self.assertTrue((Path(temp) / 'agent-tmux' / ('claude-' + 'c' * 32 + '.json')).exists())
+            self.assertTrue((Path(temp) / 'harness-footer' / ('claude-' + 'c' * 32 + '.json')).exists())
 
 
 if __name__ == '__main__':
