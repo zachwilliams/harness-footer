@@ -9,13 +9,8 @@ import json
 import subprocess
 import sys
 
-from footer import (
-    claude_cache_path,
-    claude_state,
-    is_valid_token,
-    load_settings,
-    save_json,
-)
+from claude_usage import claude_state
+from common import claude_cache_path, is_valid_token, load_settings, save_json
 
 
 def main():

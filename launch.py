@@ -10,16 +10,15 @@ import sys
 import uuid
 from pathlib import Path
 
-from footer import (
-    BACKGROUND,
-    COLORS,
+from common import (
     PANE_APP_OPTION,
     PANE_TOKEN_OPTION,
+    ROOT,
     command_output,
     read_json,
 )
+from render import BACKGROUND, COLORS
 
-ROOT = Path(__file__).resolve().parent
 TMUX = shutil.which('tmux') or 'tmux'
 TMUX_SERVER = 'harness-footer'
 PYTHON = sys.executable

@@ -7,3 +7,4 @@ activate.sh
 /bin/
 dist/
 *.bak
+.ruff_cache/

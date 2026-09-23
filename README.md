@@ -189,21 +189,35 @@ Managed policies that disable custom status commands can prevent Claude metrics
 from appearing. Remote Codex app-server usage is not supported by the local
 rollout reader. Codex rollout schema changes may require reader updates.
 
+## Project layout
+
+| File | Role |
+| --- | --- |
+| `install.py` | One-time installer: wrappers, shell startup block |
+| `launch.py` | Starts `codex`/`claude` inside tmux with the footer |
+| `footer.py` | The tmux status command, run every two seconds |
+| `render.py` | Formats usage as a status line that fits the width |
+| `claude_usage.py` | Normalizes Claude's statusLine payload |
+| `codex_usage.py` | Finds and incrementally reads Codex rollout files |
+| `claude_status.py` | Claude's statusLine command: caches metrics for tmux |
+| `common.py` | Settings, cache paths and shared helpers |
+| `tmux.conf` | Options for the dedicated `harness-footer` tmux server |
+
 ## Verification
 
 ```sh
 cd ~/.config/harness-footer
-python3 -m unittest discover -v
-python3 test_tmux.py
+python3 -m unittest -v
 ruff format --check . && ruff check .  # style: PEP 8, configured in pyproject.toml
 python3 footer.py --app codex --demo 173000 --plain
 python3 footer.py --app claude --demo 173000 --plain
 ```
 
-The tmux test uses an isolated temporary socket and fake CLI processes; it checks
-independent Claude metrics, Codex launch flags, bottom positioning, 140/80
-column layouts, and Shift+Enter delivery without sending model requests. A live
-conversation remains the final visual check in your terminal.
+Tests live in `tests/`. The tmux test (skipped without tmux) uses an isolated
+temporary socket and fake CLI processes; it checks independent Claude metrics,
+Codex launch flags, bottom positioning, 140/80 column layouts, and Shift+Enter
+delivery without sending model requests. A live conversation remains the final
+visual check in your terminal.
 
 Installer tests use temporary directories, including paths with spaces and
 apostrophes. They check argument forwarding, settings preservation, startup-file

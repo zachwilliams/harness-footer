@@ -10,15 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-FILES = (
-    'launch.py',
-    'footer.py',
-    'claude_status.py',
-    'tmux.conf',
-    'settings.example.json',
-    'README.md',
-    'LICENSE',
-)
+RUNTIME_FILES = ('tmux.conf', 'settings.example.json', 'README.md', 'LICENSE')
 REQUIRED_COMMANDS = ('tmux', 'git', 'lsof')
 SUPPORTED_SHELLS = ('bash', 'zsh')
 BEGIN_MARKER = '# >>> harness-footer >>>'
@@ -41,8 +33,8 @@ def install(prefix=None):
     target.mkdir(parents=True, exist_ok=True)
     bin_dir.mkdir(parents=True, exist_ok=True)
     if target != ROOT:
-        for name in FILES:
-            shutil.copy2(ROOT / name, target / name)
+        for path in [*ROOT.glob('*.py'), *map(ROOT.joinpath, RUNTIME_FILES)]:
+            shutil.copy2(path, target / path.name)
 
     settings = target / 'settings.json'
     if not settings.exists():

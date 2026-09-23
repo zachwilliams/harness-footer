@@ -85,7 +85,7 @@ class InstallTests(unittest.TestCase):
                     self.assertEqual(
                         output.splitlines(), ['--version', 'two words']
                     )
-            self.assertFalse((target / 'test_footer.py').exists())
+            self.assertFalse((target / 'tests').exists())
 
 
 if __name__ == '__main__':

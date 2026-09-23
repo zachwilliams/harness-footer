@@ -10,8 +10,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import claude_status
-from footer import ROOT
-from test_footer import claude_payload
+from common import ROOT
+from tests.fixtures import claude_payload
 
 
 class ClaudeStatusTests(unittest.TestCase):

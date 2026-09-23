@@ -6,13 +6,15 @@ Sends no model requests and never touches the user's own tmux sessions.
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import unittest
 from pathlib import Path
 
-from footer import (
+from common import (
     LEGACY_CACHE_NAME,
     LEGACY_PANE_APP_OPTION,
     LEGACY_PANE_TOKEN_OPTION,
@@ -56,7 +58,9 @@ SESSIONS = [
     ('one', 'claude', 173_000),
     ('two', 'claude', 42_000),
     ('three', 'codex', 0),
+    ('legacy', 'claude', 173_000),
 ]
+LEGACY_SESSION = 'legacy'
 EXPECTED_LABELS = {173_000: '173K', 42_000: '42K'}
 KEY_PROBE = """
 import os, select, sys, time, tty
@@ -135,89 +139,99 @@ class IsolatedTmux:
         subprocess.run(command, capture_output=True, check=False)
 
 
-def check_session(server, name, app, pane, tokens):
-    position = server.tmux('show-option', '-v', '-t', name, 'status-position')
-    assert position == 'bottom', position
-    status = server.tmux('show-option', '-v', '-t', name, 'status-format[0]')
-    assert str(ROOT / 'footer.py') in status, status
-    pane_app = server.tmux('show-option', '-pv', '-t', pane, PANE_APP_OPTION)
-    assert pane_app == app, pane_app
-    for width in [140, 80]:
-        server.tmux('resize-window', '-t', name, '-x', str(width), '-y', '30')
-        output = server.render(pane, width)
-        assert output.startswith(' ' + app), output
-        if app == 'claude':
-            assert EXPECTED_LABELS[tokens] in output, output
-        assert len(output.strip('\n')) <= width, output
+@unittest.skipUnless(shutil.which(TMUX), 'tmux is not installed')
+class TmuxSmokeTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory(prefix='harness-footer-test-')
+        cls.server = IsolatedTmux(Path(cls.temp.name))
+        cls.panes = {
+            name: (app, cls.server.start(name, app, tokens), tokens)
+            for name, app, tokens in SESSIONS
+        }
+        cls.codex_result = cls.server.root / 'three.json'
+        claude_count = sum(app == 'claude' for _, app, _ in SESSIONS)
+        cls.server.wait_until_ready(claude_count, cls.codex_result)
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.kill()
+        cls.temp.cleanup()
 
-def check_legacy_pane(server, pane):
-    """Panes opened before the rename keep working with their old keys."""
-    token = server.tmux('show-option', '-pv', '-t', pane, PANE_TOKEN_OPTION)
-    server.tmux(
-        'set-option', '-p', '-t', pane, LEGACY_PANE_APP_OPTION, 'claude'
-    )
-    server.tmux(
-        'set-option', '-p', '-t', pane, LEGACY_PANE_TOKEN_OPTION, token
-    )
-    server.tmux('set-option', '-pu', '-t', pane, PANE_APP_OPTION)
-    server.tmux('set-option', '-pu', '-t', pane, PANE_TOKEN_OPTION)
-    legacy_cache = server.cache / LEGACY_CACHE_NAME
-    legacy_cache.mkdir()
-    cache_name = f'claude-{token}.json'
-    (server.cache / 'harness-footer' / cache_name).rename(
-        legacy_cache / cache_name
-    )
-    output = server.render(pane)
-    assert '173K' in output and output.startswith(' claude'), output
+    def tmux(self, *args):
+        return self.server.tmux(*args)
 
+    def test_each_session_gets_its_own_footer(self):
+        for name, (app, pane, tokens) in self.panes.items():
+            if name == LEGACY_SESSION:
+                continue
+            with self.subTest(session=name):
+                status = self.tmux('show-option', '-v', '-t', name, 'status')
+                position = self.tmux(
+                    'show-option', '-v', '-t', name, 'status-position'
+                )
+                status_format = self.tmux(
+                    'show-option', '-v', '-t', name, 'status-format[0]'
+                )
+                pane_app = self.tmux(
+                    'show-option', '-pv', '-t', pane, PANE_APP_OPTION
+                )
+                self.assertEqual(status, 'on')
+                self.assertEqual(position, 'bottom')
+                self.assertIn(str(ROOT / 'footer.py'), status_format)
+                self.assertEqual(pane_app, app)
+                self.check_layout(name, app, pane, tokens)
 
-def check_keys_reach_cli(server):
-    """Shift+Enter and Ctrl+B must reach the CLI instead of tmux."""
-    assert server.tmux('show-option', '-gv', 'prefix') == 'None'
-    assert server.tmux('show-option', '-gv', 'mouse') == 'on'
-    probe = server.root / 'key_probe.py'
-    received = server.root / 'keys.bin'
-    probe.write_text(KEY_PROBE)
-    command = shlex.join([sys.executable, str(probe), str(received)])
-    server.tmux('new-session', '-d', '-s', 'keys', command)
-    time.sleep(0.5)
-    server.tmux('send-keys', '-t', 'keys', 'S-Enter')
-    deadline = time.monotonic() + 5
-    while not received.exists() and time.monotonic() < deadline:
-        time.sleep(0.1)
-    assert received.read_bytes() == b'\x1b[13;2u', received.read_bytes()
-
-
-def main():
-    with tempfile.TemporaryDirectory(prefix='harness-footer-test-') as temp:
-        server = IsolatedTmux(Path(temp))
-        panes = []
-        try:
-            for name, app, tokens in SESSIONS:
-                pane = server.start(name, app, tokens)
-                panes.append((name, app, pane, tokens))
-            codex_result = server.root / 'three.json'
-            server.wait_until_ready(claude_count=2, codex_result=codex_result)
-
-            for session in panes:
-                check_session(server, *session)
-            codex_args = json.loads(codex_result.read_text())
-            expected_args = ['--no-daemon', '-c', 'tui.status_line=[]']
-            assert codex_args == expected_args, codex_args
-            check_legacy_pane(server, panes[0][2])
-            check_keys_reach_cli(server)
-            print(
-                'PASS: isolated sessions, Codex flags, bottom status, '
-                '140/80 columns, legacy session compatibility, Shift+Enter'
+    def check_layout(self, name, app, pane, tokens):
+        for width in [140, 80]:
+            self.tmux(
+                'resize-window', '-t', name, '-x', str(width), '-y', '30'
             )
-        except Exception:
-            for name, _, pane, _ in panes:
-                print(name, server.tmux('capture-pane', '-p', '-t', pane))
-            raise
-        finally:
-            server.kill()
+            output = self.server.render(pane, width)
+            self.assertTrue(output.startswith(' ' + app), output)
+            if app == 'claude':
+                self.assertIn(EXPECTED_LABELS[tokens], output)
+            self.assertLessEqual(len(output.strip('\n')), width, output)
+
+    def test_codex_is_launched_without_its_own_status_line(self):
+        codex_args = json.loads(self.codex_result.read_text())
+        expected = ['--no-daemon', '-c', 'tui.status_line=[]']
+        self.assertEqual(codex_args, expected)
+
+    def test_panes_from_before_the_rename_keep_working(self):
+        _, pane, _ = self.panes[LEGACY_SESSION]
+        token = self.tmux('show-option', '-pv', '-t', pane, PANE_TOKEN_OPTION)
+        for legacy, current, value in [
+            (LEGACY_PANE_APP_OPTION, PANE_APP_OPTION, 'claude'),
+            (LEGACY_PANE_TOKEN_OPTION, PANE_TOKEN_OPTION, token),
+        ]:
+            self.tmux('set-option', '-p', '-t', pane, legacy, value)
+            self.tmux('set-option', '-pu', '-t', pane, current)
+        legacy_cache = self.server.cache / LEGACY_CACHE_NAME
+        legacy_cache.mkdir()
+        cache_name = f'claude-{token}.json'
+        current_cache = self.server.cache / 'harness-footer' / cache_name
+        current_cache.rename(legacy_cache / cache_name)
+
+        output = self.server.render(pane)
+        self.assertTrue(output.startswith(' claude'), output)
+        self.assertIn('173K', output)
+
+    def test_keys_reach_the_cli_instead_of_tmux(self):
+        self.assertEqual(self.tmux('show-option', '-gv', 'prefix'), 'None')
+        self.assertEqual(self.tmux('show-option', '-gv', 'mouse'), 'on')
+        probe = self.server.root / 'key_probe.py'
+        received = self.server.root / 'keys.bin'
+        probe.write_text(KEY_PROBE)
+        command = shlex.join([sys.executable, str(probe), str(received)])
+        self.tmux('new-session', '-d', '-s', 'keys', command)
+        time.sleep(0.5)
+        self.tmux('send-keys', '-t', 'keys', 'S-Enter')
+        deadline = time.monotonic() + 5
+        while not received.exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        self.assertEqual(received.read_bytes(), b'\x1b[13;2u')
 
 
 if __name__ == '__main__':
-    main()
+    unittest.main()
