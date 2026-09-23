@@ -1,14 +1,17 @@
-"""Settings, cache locations and small helpers shared by every script."""
+"""Settings, file locations and small helpers shared by every command."""
 
 import json
 import math
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+PACKAGE_DIR = Path(__file__).resolve().parent
+# -P stops the working directory from shadowing standard library modules.
+SELF_COMMAND = (sys.executable, '-P', '-m', 'harness_footer')
 DEFAULTS = {
     'context_threshold': 200_000,
     'claude_show_builtin_status': True,
@@ -18,10 +21,6 @@ MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
 
 PANE_APP_OPTION = '@harness-footer-app'
 PANE_TOKEN_OPTION = '@harness-footer-token'
-# Panes and caches created before the project was renamed.
-LEGACY_PANE_APP_OPTION = '@agent-footer-app'
-LEGACY_PANE_TOKEN_OPTION = '@agent-footer-token'
-LEGACY_CACHE_NAME = 'agent-tmux'
 
 
 def command_output(args, timeout=2):
@@ -54,8 +53,17 @@ def save_json(path, value):
             os.unlink(temp_name)
 
 
+def config_dir():
+    base = os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config'
+    return Path(base) / 'harness-footer'
+
+
+def settings_path():
+    return config_dir() / 'settings.json'
+
+
 def load_settings():
-    result = DEFAULTS | read_json(ROOT / 'settings.json')
+    result = DEFAULTS | read_json(settings_path())
     result['context_threshold'] = int(result['context_threshold'])
     if result['context_threshold'] <= 0:
         raise ValueError('context_threshold must be a positive token count')

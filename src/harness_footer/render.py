@@ -5,7 +5,11 @@ import re
 import unicodedata
 from pathlib import Path
 
-from common import MINUTES_PER_DAY, MINUTES_PER_HOUR, non_negative_number
+from harness_footer.common import (
+    MINUTES_PER_DAY,
+    MINUTES_PER_HOUR,
+    non_negative_number,
+)
 
 COLORS = {
     'base': '#c0caf5',

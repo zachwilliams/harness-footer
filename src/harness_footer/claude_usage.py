@@ -1,10 +1,8 @@
 """Read Claude Code usage from its statusLine payload and the bridge cache."""
 
-from common import (
-    LEGACY_CACHE_NAME,
+from harness_footer.common import (
     MINUTES_PER_DAY,
     MINUTES_PER_HOUR,
-    cache_dir,
     claude_cache_path,
     non_negative_number,
     read_json,
@@ -74,10 +72,4 @@ def claude_state(data):
 
 
 def cached_claude_state(token):
-    legacy_cache = cache_dir().parent / LEGACY_CACHE_NAME
-    legacy_path = legacy_cache / f'claude-{token}.json'
-    return (
-        read_json(claude_cache_path(token))
-        or read_json(legacy_path)
-        or {'app': 'claude'}
-    )
+    return read_json(claude_cache_path(token)) or {'app': 'claude'}

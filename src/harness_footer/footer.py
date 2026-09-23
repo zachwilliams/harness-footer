@@ -1,15 +1,12 @@
-#!/usr/bin/env python3
-"""Render the shared Codex/Claude tmux status line from local usage data."""
+"""The `status` command: print the tmux status line for a pane."""
 
 import argparse
 import os
 import re
 
-from claude_usage import cached_claude_state, claude_state
-from codex_usage import codex_state, read_rollout
-from common import (
-    LEGACY_PANE_APP_OPTION,
-    LEGACY_PANE_TOKEN_OPTION,
+from harness_footer.claude_usage import cached_claude_state, claude_state
+from harness_footer.codex_usage import codex_state, read_rollout
+from harness_footer.common import (
     MINUTES_PER_DAY,
     PANE_APP_OPTION,
     PANE_TOKEN_OPTION,
@@ -19,7 +16,7 @@ from common import (
     load_settings,
     read_json,
 )
-from render import render, strip_styles, style
+from harness_footer.render import render, strip_styles, style
 
 
 def git_output(cwd, *args):
@@ -38,10 +35,6 @@ def git_segment(cwd):
     return f'[{branch}]*' if changes else f'[{branch}]'
 
 
-def tmux_pane_option(name, legacy_name):
-    return f'#{{?{name},#{{{name}}},#{{{legacy_name}}}}}'
-
-
 def pane_state(socket, pane):
     """Return the usage state and working directory for a tmux pane."""
     if not socket or not re.fullmatch(r'%\d+', pane or ''):
@@ -50,8 +43,8 @@ def pane_state(socket, pane):
         [
             '#{pane_pid}',
             '#{pane_current_path}',
-            tmux_pane_option(PANE_APP_OPTION, LEGACY_PANE_APP_OPTION),
-            tmux_pane_option(PANE_TOKEN_OPTION, LEGACY_PANE_TOKEN_OPTION),
+            f'#{{{PANE_APP_OPTION}}}',
+            f'#{{{PANE_TOKEN_OPTION}}}',
         ]
     )
     query = ['display-message', '-p', '-t', pane, pane_format]
@@ -62,10 +55,11 @@ def pane_state(socket, pane):
     return codex_state(int(pid)), cwd
 
 
-def demo_state(app):
+def demo_state(app, context):
     state = {
         'app': app,
         'model': 'GPT-6-Astra' if app == 'codex' else 'Opus',
+        'context': context,
         'window': 1_000_000,
         'rate_limits': {
             'primary': {
@@ -79,33 +73,37 @@ def demo_state(app):
     return state
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description=__doc__)
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        prog='harness-footer status', description=__doc__
+    )
     parser.add_argument('--socket', help='tmux server socket path')
     parser.add_argument('--pane', help='tmux pane ID, such as %%1')
     parser.add_argument('--width', type=int, default=200)
     parser.add_argument(
-        '--rollout', help='Explicit local transcript for preview/debugging'
-    )
-    parser.add_argument(
         '--plain', action='store_true', help='Omit tmux styles'
     )
     parser.add_argument(
-        '--demo', type=int, help='Preview a context count in a 1M window'
+        '--demo',
+        type=int,
+        metavar='TOKENS',
+        help='Preview a context count in a 1M window',
     )
     parser.add_argument('--app', choices=['codex', 'claude'], default='codex')
     parser.add_argument(
-        '--claude-json',
-        help='Explicit statusLine payload for preview/debugging',
+        '--rollout', help='Read this Codex rollout file (for debugging)'
     )
-    return parser.parse_args()
+    parser.add_argument(
+        '--claude-json',
+        help='Read this Claude statusLine payload (for debugging)',
+    )
+    return parser.parse_args(argv)
 
 
-def main():
-    args = parse_args()
+def status_line(args):
     config = load_settings()
     if args.demo is not None:
-        state = demo_state(args.app) | {'context': args.demo}
+        state = demo_state(args.app, args.demo)
         cwd, git = '/example/my-project', '[main]*'
     else:
         if args.claude_json:
@@ -117,12 +115,14 @@ def main():
         cwd = state.get('cwd') or cwd
         git = git_segment(cwd)
     line = render(state, cwd, git, config, args.width)
-    print(strip_styles(line) if args.plain else line)
+    return strip_styles(line) if args.plain else line
 
 
-if __name__ == '__main__':
+def main(argv):
+    args = parse_args(argv)
     try:
-        main()
+        line = status_line(args)
     except Exception:
         # A missing or incompatible rollout must never break the terminal.
-        print(style(' harness-footer: usage unavailable', 'dim'))
+        line = style(' harness-footer: usage unavailable', 'dim')
+    print(line)

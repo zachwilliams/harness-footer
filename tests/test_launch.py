@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-import launch
+from harness_footer import launch
 
 
 class LaunchTests(unittest.TestCase):
@@ -40,7 +40,7 @@ class LaunchTests(unittest.TestCase):
             'statusLine': {'command': 'cat', 'padding': 2},
         }
         args = ['--settings', json.dumps(original), '--resume', 'abc']
-        with patch('launch.read_json', return_value={}):
+        with patch('harness_footer.launch.read_json', return_value={}):
             result = launch.claude_arguments(args, 'a' * 32)
         settings = json.loads(result[1])
         self.assertEqual(settings['permissions'], original['permissions'])

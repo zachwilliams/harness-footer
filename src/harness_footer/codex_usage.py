@@ -6,7 +6,7 @@ import shutil
 from collections import deque
 from pathlib import Path
 
-from common import (
+from harness_footer.common import (
     cache_dir,
     command_output,
     non_negative_number,

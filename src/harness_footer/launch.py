@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""Launch interactive Codex or Claude Code with the shared tmux footer."""
+"""The `claude` and `codex` commands: run a CLI inside tmux with the footer."""
 
 import json
 import os
@@ -10,19 +9,18 @@ import sys
 import uuid
 from pathlib import Path
 
-from common import (
+from harness_footer.common import (
+    PACKAGE_DIR,
     PANE_APP_OPTION,
     PANE_TOKEN_OPTION,
-    ROOT,
+    SELF_COMMAND,
     command_output,
     read_json,
 )
-from render import BACKGROUND, COLORS
+from harness_footer.render import BACKGROUND, COLORS
 
 TMUX = shutil.which('tmux') or 'tmux'
 TMUX_SERVER = 'harness-footer'
-PYTHON = sys.executable
-USAGE = 'Usage: harness-footer {codex|claude} [CLI arguments]'
 INSIDE_TMUX_FLAG = '--inside'
 
 SUBCOMMANDS = {
@@ -126,7 +124,7 @@ def configure_tmux(app, token):
     session = tmux('display-message', '-p', '-t', pane, '#{session_id}')
     tmux('set-option', '-p', '-t', pane, PANE_APP_OPTION, app)
     tmux('set-option', '-p', '-t', pane, PANE_TOKEN_OPTION, token)
-    footer = shlex.join([PYTHON, str(ROOT / 'footer.py')])
+    footer = shlex.join([*SELF_COMMAND, 'status'])
     command = (
         f'{footer} --socket #{{q:socket_path}} --pane #{{pane_id}}'
         ' --width #{client_width}'
@@ -219,7 +217,7 @@ def claude_arguments(args, token):
     remaining, explicit, sources = extract_settings_arguments(args)
     effective = merge(configured_claude_settings(sources), explicit)
     original = effective.get('statusLine') or {}
-    bridge = [PYTHON, str(ROOT / 'claude_status.py'), '--token', token]
+    bridge = [*SELF_COMMAND, 'claude-status', '--token', token]
     if original.get('command'):
         bridge += ['--forward', original['command']]
     explicit['statusLine'] = {
@@ -242,25 +240,17 @@ def run_in_current_pane(app, executable, args):
 
 def run_in_new_session(app, args):
     session = f'{app}-{uuid.uuid4().hex[:8]}'
-    command = shlex.join(
-        [PYTHON, str(ROOT / 'launch.py'), app, INSIDE_TMUX_FLAG, *args]
-    )
+    command = shlex.join([*SELF_COMMAND, app, INSIDE_TMUX_FLAG, *args])
     environment = []
     for key in FORWARDED_ENVIRONMENT:
         if key in os.environ:
             environment += ['-e', f'{key}={os.environ[key]}']
-    server = ['-L', TMUX_SERVER, '-f', str(ROOT / 'tmux.conf')]
+    server = ['-L', TMUX_SERVER, '-f', str(PACKAGE_DIR / 'tmux.conf')]
     new_session = ['new-session', '-s', session, '-c', os.getcwd()]
     os.execv(TMUX, [TMUX, *server, *new_session, *environment, command])
 
 
-def main():
-    if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
-        print(USAGE)
-        return
-    app, *args = sys.argv[1:]
-    if app not in SUBCOMMANDS:
-        raise SystemExit(USAGE)
+def main(app, args):
     executable = shutil.which(app)
     if not executable:
         raise SystemExit(f'{app} is not on PATH')
@@ -279,7 +269,3 @@ def main():
         run_in_current_pane(app, executable, args)
     else:
         run_in_new_session(app, args)
-
-
-if __name__ == '__main__':
-    main()

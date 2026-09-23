@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codex_usage import read_rollout
+from harness_footer.codex_usage import read_rollout
 
 TOKEN_COUNT_EVENT = {
     'type': 'event_msg',

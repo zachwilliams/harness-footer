@@ -36,36 +36,36 @@ it, set this in `settings.json`:
 
 ## Install
 
-You need macOS or Linux (including WSL), Python 3.10+, tmux 3.2+, Git and
+You need macOS or Linux (including WSL), Python 3.11+, tmux 3.2+, Git and
 `lsof`, plus Codex CLI or Claude Code.
 
-Put the project wherever you want to keep it, then run the installer:
-
 ```sh
-cd ~/.config/harness-footer
-python3 install.py
+uv tool install git+https://github.com/zachwilliams/harness-footer
+harness-footer setup
 ```
 
-Open a new shell and run `claude` or `codex` as usual.
+Open a new shell and run `claude` or `codex` as usual. `pipx install` works
+too if you don't use uv.
 
-The installer adds a short block to `~/.zshrc` or `~/.bashrc` that routes
-`claude` and `codex` through the footer. It backs up the file first, and it's
-safe to run again. Options:
+`harness-footer setup` adds these lines to `~/.zshrc` or `~/.bashrc`, backing
+up the file first:
 
-| Option | Effect |
-| --- | --- |
-| `--shell bash` or `--shell zsh` | Pick the shell (default: `$SHELL`) |
-| `--shell-rc PATH` | Edit a different startup file, e.g. `~/.bash_profile` |
-| `--no-shell` | Don't edit any startup file; source `activate.sh` yourself |
-| `--prefix PATH` | Install a copy under `PATH/share/harness-footer` |
+```sh
+# >>> harness-footer >>>
+claude() { harness-footer claude "$@"; }
+codex() { harness-footer codex "$@"; }
+# <<< harness-footer <<<
+```
 
-To launch without the shell functions, run `./bin/harness-footer claude`.
-To skip the footer for one run, use `command claude` or `command codex`.
+Use `--shell bash` or `--shell zsh` to pick the shell, `--shell-rc PATH` to
+edit a different startup file, or `--print` to print the lines and add them
+yourself. To skip the footer for one run, use `command claude` or
+`command codex`.
 
 ## Settings
 
-The installer creates `settings.json` next to `footer.py`. It isn't tracked
-by Git.
+`harness-footer setup` creates `~/.config/harness-footer/settings.json` (or
+`$XDG_CONFIG_HOME/harness-footer/settings.json`).
 
 | Setting | Default | Effect |
 | --- | --- | --- |
@@ -74,11 +74,11 @@ by Git.
 
 ## Uninstall
 
-1. Open the startup file the installer edited (`~/.zshrc` or `~/.bashrc`).
+1. Open the startup file `setup` edited (`~/.zshrc` or `~/.bashrc`).
 2. Delete everything from `# >>> harness-footer >>>` to
    `# <<< harness-footer <<<`, including those two lines.
-3. Open a new shell.
-4. Optionally delete the project folder and `~/.cache/harness-footer`.
+3. Run `uv tool uninstall harness-footer`.
+4. Optionally delete `~/.config/harness-footer` and `~/.cache/harness-footer`.
 
 harness-footer never changes your Claude or Codex settings, so there is
 nothing else to undo.
@@ -87,14 +87,14 @@ nothing else to undo.
 
 ### How it works
 
-`launch.py` starts the CLI in a tmux session on a dedicated `harness-footer`
-tmux server. Each terminal tab or split gets its own session. The status bar
-runs `footer.py` every two seconds.
+`harness-footer claude` starts Claude in a tmux session on a dedicated
+`harness-footer` tmux server. Each terminal tab or split gets its own session.
+The status bar runs `harness-footer status` every two seconds.
 
 - **Claude:** each launch passes Claude a `--settings` override whose
-  `statusLine` command is `claude_status.py`. That script caches the usage
-  data Claude sends it, then runs your own status line command if you have
-  one. Your other settings are merged in and kept.
+  `statusLine` command is `harness-footer claude-status`. That command caches
+  the usage data Claude sends it, then runs your own status line command if
+  you have one. Your other settings are merged in and kept.
 - **Codex:** the footer finds the `codex` process in the pane and reads its
   rollout file from where it last stopped. Codex runs with `--no-daemon` so
   the file belongs to that process.
@@ -143,8 +143,8 @@ tmux -L harness-footer detach-client -s claude-SESSION_ID
 tmux -L harness-footer attach-session -t claude-SESSION_ID
 ```
 
-After editing `tmux.conf`, apply it to a running server with
-`tmux -L harness-footer source-file tmux.conf`.
+After editing `src/harness_footer/tmux.conf`, apply it to a running server
+with `tmux -L harness-footer source-file src/harness_footer/tmux.conf`.
 
 The footer is skipped for help, version, admin subcommands, `codex exec`,
 `claude -p`, redirected input or output, and Claude's background, cloud, bare
@@ -158,34 +158,31 @@ and safe modes.
   Claude metrics.
 - Codex usage from a remote app-server isn't supported. Changes to the Codex
   rollout format may need reader updates.
-- The installer records the Python interpreter it ran with. Run it again after
-  moving the project or removing that interpreter.
-
-### Upgrading from agent-tmux
-
-The installer replaces the old `agent-tmux` block in your startup file.
-Sessions that were already running keep working until they exit.
 
 ### Project layout
 
+The code lives in `src/harness_footer/`:
+
 | File | Role |
 | --- | --- |
-| `install.py` | One-time installer: wrappers and startup file block |
-| `launch.py` | Starts `codex` or `claude` inside tmux with the footer |
-| `footer.py` | The tmux status command |
+| `cli.py` | The `harness-footer` command and its subcommands |
+| `launch.py` | `claude` and `codex`: run the CLI inside tmux with the footer |
+| `footer.py` | `status`: the tmux status command |
 | `render.py` | Formats usage as a status line that fits the width |
 | `claude_usage.py` | Reads Claude's status line data |
 | `codex_usage.py` | Finds and reads Codex rollout files |
-| `claude_status.py` | Claude's status line command; caches usage for tmux |
-| `common.py` | Settings, cache paths and shared helpers |
+| `claude_status.py` | `claude-status`: Claude's status line command |
+| `shell_setup.py` | `setup`: adds the shell functions |
+| `common.py` | Settings, file locations and shared helpers |
 | `tmux.conf` | Options for the dedicated tmux server |
 
 ### Development
 
 ```sh
-python3 -m unittest -v                  # tests, in tests/
-ruff format --check . && ruff check .   # PEP 8 style, see pyproject.toml
-python3 footer.py --app claude --demo 173000 --plain   # preview the footer
+uv tool install --editable .          # use your checkout; edits apply live
+uv run python -m unittest -v          # tests, in tests/
+uv run ruff format --check . && uv run ruff check .   # PEP 8 style
+harness-footer status --demo 173000 --plain           # preview the footer
 ```
 
 The tmux tests run on an isolated tmux server with fake CLIs, so they send no

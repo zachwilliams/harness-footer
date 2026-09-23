@@ -1,8 +1,8 @@
 import unittest
 
-from claude_usage import claude_state
-from common import DEFAULTS
-from render import context_segment, quota_segment, strip_styles
+from harness_footer.claude_usage import claude_state
+from harness_footer.common import DEFAULTS
+from harness_footer.render import context_segment, quota_segment, strip_styles
 from tests.fixtures import claude_payload
 
 

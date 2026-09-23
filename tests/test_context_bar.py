@@ -1,6 +1,6 @@
 import unittest
 
-from render import context_segment, strip_styles
+from harness_footer.render import context_segment, strip_styles
 
 THRESHOLD = {'context_threshold': 200_000}
 

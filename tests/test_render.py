@@ -1,8 +1,8 @@
 import unittest
 
-from claude_usage import claude_state
-from common import DEFAULTS
-from render import (
+from harness_footer.claude_usage import claude_state
+from harness_footer.common import DEFAULTS
+from harness_footer.render import (
     cost_segment,
     display_width,
     render,

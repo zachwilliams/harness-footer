@@ -18,3 +18,11 @@ def claude_payload(tokens=173_000, session='one'):
             'seven_day': {'used_percentage': 57},
         },
     }
+
+
+def isolated_environment(directory):
+    """Environment variables that keep caches and settings in directory."""
+    return {
+        'XDG_CACHE_HOME': f'{directory}/cache',
+        'XDG_CONFIG_HOME': f'{directory}/config',
+    }
