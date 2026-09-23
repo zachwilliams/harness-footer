@@ -1,173 +1,141 @@
 # harness-footer
 
-A shared, pinned tmux status bar for Codex CLI and Claude Code. Plain Python,
-no Python packages, no model requests, and no persistent changes to agent settings.
-
-Interactive `codex` and `claude` use the same bottom status bar:
+A tmux status bar for Codex CLI and Claude Code. It shows the model, context
+usage, quota usage and cost of the session you're working in.
 
 ```text
-codex | gpt-6-astra (1m) | project | [main]* | ctx[█████████░│░░░░░] 173K 17% | quota[██████░░░░] 7d 57%
-claude | Opus 5.5 (1m) | project | [main]* | ctx[█████████░│░░░░░] 173K 17% | quota[██████░░░░] 5h 42% 7d 57% | API est $1.23
+claude | Opus 5.5 (1m) | project | [main]* | ctx[███░│░░░░░░░░░░░░░░░░] 173K 17% | quota[██████░░░░] 5h 42% 7d 57% | API est $1.23
 ```
 
-These are illustrative values. Actual values come from each active session.
-Colors, thresholds, gauges, Git status, directory names, and responsive layout
-are shared. The app prefix is bold and stays visible as the terminal narrows.
-Model windows use lowercase `k`/`m` without the word `context`. Cumulative
-tokens are not displayed.
+| Segment | Example | What it shows |
+| --- | --- | --- |
+| Harness | `claude` | The CLI running in this pane: `claude` or `codex` |
+| Model | `Opus 5.5 (1m)` | Model name and context window size |
+| Working directory | `project` | Name of the current directory |
+| Git branch | `[main]*` | Current branch; `*` means uncommitted changes |
+| Context usage | `ctx[███░│░░…] 173K 17%` | Tokens in context and percentage of the window used |
+| Quota usage | `quota[██████░░░░] 5h 42% 7d 57%` | Percentage used of each rate-limit window |
+| Cost estimate | `API est $1.23` | Claude's estimate of the session cost at API prices |
+
+The context bar is 20 blocks wide and covers the model's whole context window.
+The `│` marks the context threshold, 200K tokens by default. The bar turns
+yellow past the threshold and red at 90% of the window (the last two blocks).
+I picked 200K because that's where I start to see performance decay. To change
+it, set this in `settings.json`:
+
+```json
+"context_threshold": 200000
+```
 
 > [!WARNING]
-> **Not yet suitable if you use tmux for window management.** harness-footer
-> is built for people who run the CLIs directly in their terminal's own tabs
-> and splits. Inside your own tmux session it replaces that session's status
-> bar, and the replacement stays after the CLI exits. It also leaves your
-> key settings alone, so Shift+Enter depends on your own configuration.
-> Outside tmux it starts a separate tmux server with no prefix key, so your
-> usual tmux bindings don't work there. See [Terminal behavior](#terminal-behavior).
-
-## Requirements
-
-- macOS or Linux, including WSL; native Windows is not supported.
-- Python 3.10+, tmux 3.2+, Git, and `lsof`, available on `PATH`.
-- Codex CLI and/or Claude Code installed and authenticated separately.
-- Bash or Zsh for automatic shell integration; a UTF-8 terminal.
-
-Validated locally with macOS, tmux 3.7c, Codex 0.156.1, and Claude Code 2.1.280.
-Linux uses the same tools but has not yet been validated in a live session.
-The terminal demos and tests do not require either agent to be authenticated.
+> If you manage your windows with tmux, harness-footer isn't a good fit yet.
+> Inside an existing tmux session it replaces that session's status bar until
+> the session ends, and it doesn't set up Shift+Enter. Outside tmux it starts
+> its own tmux server with no prefix key, so your tmux key bindings don't work
+> there. See [Terminal behavior](#terminal-behavior).
 
 ## Install
 
-Clone or unpack the project wherever you want to keep it, for example
-`~/.config/harness-footer`, then run:
+You need macOS or Linux (including WSL), Python 3.10+, tmux 3.2+, Git and
+`lsof`, plus Codex CLI or Claude Code.
+
+Put the project wherever you want to keep it, then run the installer:
 
 ```sh
 cd ~/.config/harness-footer
 python3 install.py
-. ./activate.sh
-claude  # or codex
 ```
 
-The installer checks dependencies, creates `activate.sh` and `bin/harness-footer`,
-and adds a marked source block to your shell startup file. Zsh uses
-`${ZDOTDIR:-$HOME}/.zshrc`; Bash uses `~/.bashrc`. It backs up an existing startup
-file before editing and preserves your `settings.json`. Re-running updates the
-same block without duplicating it. New interactive shells load the wrappers.
-On macOS, a Bash login shell must source `~/.bashrc`, or select your login startup
-file explicitly with `--shell-rc ~/.bash_profile`.
+Open a new shell and run `claude` or `codex` as usual.
 
-The checkout is the installation by default, so source changes apply directly.
-No hardcoded username, Homebrew prefix, or Python version is required. Generated
-files record the interpreter used to run the installer; re-run it after moving
-the checkout or removing that interpreter.
+The installer adds a short block to `~/.zshrc` or `~/.bashrc` that routes
+`claude` and `codex` through the footer. It backs up the file first, and it's
+safe to run again. Options:
 
-```sh
-# Choose a shell or a custom startup file:
-python3 install.py --shell zsh --shell-rc ~/.config/zsh/.zshrc.local
+| Option | Effect |
+| --- | --- |
+| `--shell bash` or `--shell zsh` | Pick the shell (default: `$SHELL`) |
+| `--shell-rc PATH` | Edit a different startup file, e.g. `~/.bash_profile` |
+| `--no-shell` | Don't edit any startup file; source `activate.sh` yourself |
+| `--prefix PATH` | Install a copy under `PATH/share/harness-footer` |
 
-# Generate wrappers, with no automatic shell startup edit:
-python3 install.py --no-shell
+To launch without the shell functions, run `./bin/harness-footer claude`.
+To skip the footer for one run, use `command claude` or `command codex`.
 
-# Optional: install a separate runtime copy under ~/.local/share/harness-footer:
-python3 install.py --prefix ~/.local
+## Settings
 
-# Direct launch without sourcing shell functions:
-./bin/harness-footer claude
-./bin/harness-footer codex resume
-```
+The installer creates `settings.json` next to `footer.py`. It isn't tracked
+by Git.
 
-Use the activation path printed by the installer when installing a separate copy.
-With `--prefix`, the standalone command is in `PREFIX/bin/harness-footer`.
-Already-running sessions continue running; edits to the renderer take effect at
-the next refresh, while launcher changes require a new session.
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `context_threshold` | `200000` | Tokens at which the context bar turns yellow |
+| `claude_show_builtin_status` | `true` | Set to `false` to hide Claude's own status line |
 
-When upgrading from the original `agent-tmux` name, the installer replaces its
-old marked shell block. Running tmux sessions can still read the old pane keys
-and usage cache. If you move the checkout while sessions are open, keep a symlink
-from the old checkout path to the new one until those sessions have exited.
-Sessions already running on the old `agent-footer` tmux server remain there;
-new launches use the `harness-footer` server.
+## Uninstall
 
-## Configuration
+1. Open the startup file the installer edited (`~/.zshrc` or `~/.bashrc`).
+2. Delete everything from `# >>> harness-footer >>>` to
+   `# <<< harness-footer <<<`, including those two lines.
+3. Open a new shell.
+4. Optionally delete the project folder and `~/.cache/harness-footer`.
 
-The installer creates `settings.json` beside `footer.py` from
-`settings.example.json` if it is missing. `settings.json` is ignored by Git;
-your thresholds and preferences are not included when you share the repository.
-The defaults also work directly from a fresh checkout before installation.
+harness-footer never changes your Claude or Codex settings, so there is
+nothing else to undo.
 
-## Compare, then hide Claude's internal status
+## Details
 
-Claude's existing status command is forwarded its original JSON and remains
-visible by default. No persistent Claude settings are changed. After comparing,
-set this in your installation's `settings.json`:
+### How it works
 
-```json
-"claude_show_builtin_status": false
-```
+`launch.py` starts the CLI in a tmux session on a dedicated `harness-footer`
+tmux server. Each terminal tab or split gets its own session. The status bar
+runs `footer.py` every two seconds.
 
-The bridge then emits no internal status text while continuing to feed tmux.
-This takes effect on Claude's next status update. Setting it back to `true`
-restores the original command's output. Removing `statusLine` from your user
-Claude settings also works for future launches, but is unnecessary.
+- **Claude:** each launch passes Claude a `--settings` override whose
+  `statusLine` command is `claude_status.py`. That script caches the usage
+  data Claude sends it, then runs your own status line command if you have
+  one. Your other settings are merged in and kept.
+- **Codex:** the footer finds the `codex` process in the pane and reads its
+  rollout file from where it last stopped. Codex runs with `--no-daemon` so
+  the file belongs to that process.
 
-## Meaning and data sources
+Cached usage is written to `~/.cache/harness-footer` (or
+`$XDG_CACHE_HOME/harness-footer`) with mode 0600. It never contains
+transcript text or credentials, and the footer makes no network requests.
 
-- The context gauge's first ten cells cover 0–200K tokens; its five-cell tail
-  covers the rest of a larger context window. Yellow starts at 150K, red at 200K.
-  Smaller windows also warn at 50%/80% usage. Edit `settings.json` to adjust.
-- `[branch]*` includes staged, unstaged, and untracked changes.
-- Quota percentages are used, not remaining. Quota is hidden when unavailable.
-- Codex uses the existing incremental rollout reader and `--no-daemon` to bind
-  usage to the pane's process.
-- Claude uses its documented statusLine JSON callback. Context includes input,
-  cache reads, and cache writes, excluding output, matching Claude's context
-  percentage. Startup/compaction waits for new usage.
-- Claude's `API est $…` is the reported `cost.total_cost_usd` for the whole session.
-  It is a client-side API price estimate, not an invoice or an overage-only amount.
-  It is displayed whenever reported, without guessing billing mode from quota
-  presence or percentage. Enterprise gateway spend limits are shown when supplied.
-- Codex's inspected local usage records expose tokens and quota/credit metadata,
-  not a session dollar cost. The footer hides cost when unavailable.
-  Credit balances and quota percentages are not converted to dollars.
-  Claude cost data is also hidden when missing; reported zero stays `$0.00`.
-  Neither feed establishes actual enterprise contract charges or overage owed.
-- Narrow layouts shorten or omit model, directory, and Git labels before dropping
-  cost. Extremely narrow layouts retain only the app and compact context display.
-- Each Claude launch gets a unique cache key, even with simultaneous sessions in
-  the same directory. Normalized metrics are written atomically with mode 0600
-  under `~/.cache/harness-footer` (or `$XDG_CACHE_HOME/harness-footer`). No transcript
-  content or credentials are cached and the footer makes no API requests.
-- The renderer refreshes every two seconds; metrics change when each CLI reports
-  usage. Git and directory information are rendered independently.
+### What the numbers mean
 
-See [Claude's status-line data documentation](https://code.claude.com/docs/en/statusline).
+- **Context:** for Claude, input tokens plus cache reads and writes, matching
+  Claude's own context percentage. After startup or compaction the footer
+  shows `ctx: awaiting usage` until new numbers arrive.
+- **Quota:** percentage used, per window. Hidden when the CLI doesn't report
+  it. Enterprise spend limits appear as `spend`.
+- **Cost:** Claude's `cost.total_cost_usd` for the whole session, estimated at
+  API prices. What you're billed can differ. Codex doesn't report cost, so no
+  cost is shown for Codex.
+- **Narrow terminals:** labels shorten, then drop, from the model inward.
+  The harness name and context usage always stay.
 
-## Terminal behavior
+### Terminal behavior
 
-Each ordinary terminal pane gets its own tmux session on the `harness-footer`
-server. Continue using iTerm tabs and splits normally.
+The dedicated tmux server is configured so the CLIs behave as they do
+outside tmux:
 
-In an existing tmux session, harness-footer runs in the current pane instead of
-nesting tmux. It overwrites that session's `status`, `status-position`,
-`status-interval`, `status-style` and `status-format[0]`, and those settings
-stay until the session ends. The footer shows whichever pane is active, so
-other splits in the same window don't get their own footer.
+- Shift+Enter and other modified keys reach the CLI.
+- There is no prefix key, so Ctrl+B and every other shortcut reach the CLI.
+- The mouse wheel scrolls tmux history, since your terminal's scrollback can't
+  see output inside tmux. Hold Option in iTerm2 for native text selection.
+- Notifications, clipboard writes, focus changes and window titles reach the
+  terminal.
 
-The dedicated server is configured so the CLIs behave as they do outside tmux:
+Inside your own tmux session, harness-footer runs in the current pane. It sets
+that session's `status`, `status-position`, `status-interval`, `status-style`
+and `status-format[0]`, which stay until the session ends. It doesn't change
+your server options, so copy the `extended-keys` lines from `tmux.conf` into
+your own config if you want Shift+Enter. The footer follows the active pane.
 
-- Shift+Enter and other modified keys reach the CLI (`extended-keys always`).
-- There is no tmux prefix key, so Ctrl+B and every other shortcut reach the CLI.
-- The mouse wheel scrolls tmux history, because the terminal's own scrollback
-  cannot see output inside tmux. Dragging selects and copies; in iTerm2, hold
-  Option for native selection.
-- Notifications, clipboard writes, focus changes and window titles are passed
-  through to the terminal.
-
-Inside your own tmux session these server options are left alone. Add the
-`extended-keys` lines from `tmux.conf` to your configuration for Shift+Enter.
-
-Exiting the CLI returns to the original shell. To detach or reattach from
-another terminal:
+Exiting the CLI closes its tmux session. To detach or reattach from another
+terminal:
 
 ```sh
 tmux -L harness-footer list-sessions
@@ -175,63 +143,54 @@ tmux -L harness-footer detach-client -s claude-SESSION_ID
 tmux -L harness-footer attach-session -t claude-SESSION_ID
 ```
 
-A running server keeps its old options after `tmux.conf` changes; apply them
-with `tmux -L harness-footer source-file tmux.conf`.
+After editing `tmux.conf`, apply it to a running server with
+`tmux -L harness-footer source-file tmux.conf`.
 
-Help, version, administrative subcommands, `codex exec`, `claude -p`, redirected
-input/output, and Claude background/cloud/bare/safe modes bypass the wrapper.
-`command claude` and `command codex` bypass it explicitly.
+The footer is skipped for help, version, admin subcommands, `codex exec`,
+`claude -p`, redirected input or output, and Claude's background, cloud, bare
+and safe modes.
 
-Claude's bridge is passed through a per-launch `--settings` override. Explicit
-settings are merged so other supplied settings are retained. It forwards the
-status command from user/project/local settings or explicit `--settings`.
-Managed policies that disable custom status commands can prevent Claude metrics
-from appearing. Remote Codex app-server usage is not supported by the local
-rollout reader. Codex rollout schema changes may require reader updates.
+### Limitations
 
-## Project layout
+- Tested on macOS with tmux 3.7c, Codex 0.156.1 and Claude Code 2.1.280.
+  Linux should work but hasn't been tested in a live session.
+- Managed Claude policies that block custom status line commands stop the
+  Claude metrics.
+- Codex usage from a remote app-server isn't supported. Changes to the Codex
+  rollout format may need reader updates.
+- The installer records the Python interpreter it ran with. Run it again after
+  moving the project or removing that interpreter.
+
+### Upgrading from agent-tmux
+
+The installer replaces the old `agent-tmux` block in your startup file.
+Sessions that were already running keep working until they exit.
+
+### Project layout
 
 | File | Role |
 | --- | --- |
-| `install.py` | One-time installer: wrappers, shell startup block |
-| `launch.py` | Starts `codex`/`claude` inside tmux with the footer |
-| `footer.py` | The tmux status command, run every two seconds |
+| `install.py` | One-time installer: wrappers and startup file block |
+| `launch.py` | Starts `codex` or `claude` inside tmux with the footer |
+| `footer.py` | The tmux status command |
 | `render.py` | Formats usage as a status line that fits the width |
-| `claude_usage.py` | Normalizes Claude's statusLine payload |
-| `codex_usage.py` | Finds and incrementally reads Codex rollout files |
-| `claude_status.py` | Claude's statusLine command: caches metrics for tmux |
+| `claude_usage.py` | Reads Claude's status line data |
+| `codex_usage.py` | Finds and reads Codex rollout files |
+| `claude_status.py` | Claude's status line command; caches usage for tmux |
 | `common.py` | Settings, cache paths and shared helpers |
-| `tmux.conf` | Options for the dedicated `harness-footer` tmux server |
+| `tmux.conf` | Options for the dedicated tmux server |
 
-## Verification
+### Development
 
 ```sh
-cd ~/.config/harness-footer
-python3 -m unittest -v
-ruff format --check . && ruff check .  # style: PEP 8, configured in pyproject.toml
-python3 footer.py --app codex --demo 173000 --plain
-python3 footer.py --app claude --demo 173000 --plain
+python3 -m unittest -v                  # tests, in tests/
+ruff format --check . && ruff check .   # PEP 8 style, see pyproject.toml
+python3 footer.py --app claude --demo 173000 --plain   # preview the footer
 ```
 
-Tests live in `tests/`. The tmux test (skipped without tmux) uses an isolated
-temporary socket and fake CLI processes; it checks independent Claude metrics,
-Codex launch flags, bottom positioning, 140/80 column layouts, and Shift+Enter
-delivery without sending model requests. A live conversation remains the final
-visual check in your terminal.
-
-Installer tests use temporary directories, including paths with spaces and
-apostrophes. They check argument forwarding, settings preservation, startup-file
-backups, and repeated installation. Generated activation scripts, local settings,
-bytecode, and distribution archives are excluded from Git.
-
-## Uninstall
-
-Remove the `# >>> harness-footer >>>` through `# <<< harness-footer <<<` block from the
-startup file reported by the installer, then open a new shell. To stop using the
-wrappers immediately, run `unset -f codex claude`. Your agent configurations are
-unchanged. You can then remove the checkout/runtime installation, its generated
-wrapper, and `~/.cache/harness-footer` if you no longer need them.
+The tmux tests run on an isolated tmux server with fake CLIs, so they send no
+model requests. They're skipped when tmux isn't installed.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE)

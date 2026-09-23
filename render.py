@@ -18,6 +18,8 @@ COLORS = {
 BACKGROUND = '#1a1b26'
 WARN_PERCENT = 50
 ALERT_PERCENT = 80
+CONTEXT_BAR_WIDTH = 20
+CONTEXT_ALERT_FRACTION = 0.9
 CLAUDE_MODEL_ID = re.compile(
     r'claude-(opus|sonnet|haiku|fable)-(\d+)(?:[-.](\d{1,2}))?(?:[-@]|$)'
 )
@@ -96,18 +98,26 @@ def percent_color(percent):
     return 'green'
 
 
-def context_color(used, window, config):
-    percent = used / window * 100 if window else 0
-    small_window = bool(window) and window < config['target_tokens']
-    if used >= config['target_tokens'] or (
-        small_window and percent >= ALERT_PERCENT
-    ):
+def context_color(used, window, threshold):
+    if window and used >= window * CONTEXT_ALERT_FRACTION:
         return 'red'
-    if used >= config['warn_tokens'] or (
-        small_window and percent >= WARN_PERCENT
-    ):
+    if used >= threshold:
         return 'yellow'
     return 'green'
+
+
+def context_gauge(used, window, threshold, color):
+    """Draw usage across the whole window, with a marker at the threshold."""
+    scale = window or threshold
+    cells = bar(used, scale, CONTEXT_BAR_WIDTH)
+    if threshold >= scale:
+        return style(cells, color)
+    marker = filled_cells(threshold, scale, CONTEXT_BAR_WIDTH)
+    return (
+        style(cells[:marker], color)
+        + style('│')
+        + style(cells[marker:], color)
+    )
 
 
 def context_segment(state, config, compact=False):
@@ -115,23 +125,14 @@ def context_segment(state, config, compact=False):
     window = non_negative_number(state.get('window'))
     if used is None:
         return style('ctx: awaiting usage', 'dim')
-    color = context_color(used, window, config)
+    threshold = config['context_threshold']
+    color = context_color(used, window, threshold)
     label = format_tokens(used)
     if window:
         label += f' {used / window * 100:.0f}%'
-    target = config['target_tokens']
     if compact:
-        return style(f'ctx {label} / {format_tokens(target)}', color)
-
-    head_span = min(target, window) if window else target
-    gauge = style(bar(used, head_span, config['head_width']), color)
-    gauge += style('│')
-    if window and window > head_span:
-        tail_width = config['tail_width']
-        overflow = max(0, used - head_span)
-        filled = filled_cells(overflow, window - head_span, tail_width)
-        gauge += style('█' * filled, 'red')
-        gauge += style('░' * (tail_width - filled), 'dim')
+        return style(f'ctx {label} / {format_tokens(threshold)}', color)
+    gauge = context_gauge(used, window, threshold, color)
     return style('ctx[', color) + gauge + style(f'] {label}', color)
 
 

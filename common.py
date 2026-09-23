@@ -10,13 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DEFAULTS = {
-    'warn_tokens': 150_000,
-    'target_tokens': 200_000,
-    'head_width': 10,
-    'tail_width': 5,
+    'context_threshold': 200_000,
     'claude_show_builtin_status': True,
 }
-INTEGER_SETTINGS = ('warn_tokens', 'target_tokens', 'head_width', 'tail_width')
 MINUTES_PER_HOUR = 60
 MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
 
@@ -60,14 +56,9 @@ def save_json(path, value):
 
 def load_settings():
     result = DEFAULTS | read_json(ROOT / 'settings.json')
-    for key in INTEGER_SETTINGS:
-        result[key] = int(result[key])
-    if not 0 < result['warn_tokens'] < result['target_tokens']:
-        raise ValueError('Require 0 < warn_tokens < target_tokens')
-    if not 1 <= result['head_width'] <= 30:
-        raise ValueError('Require 1 <= head_width <= 30')
-    if not 0 <= result['tail_width'] <= 15:
-        raise ValueError('Require 0 <= tail_width <= 15')
+    result['context_threshold'] = int(result['context_threshold'])
+    if result['context_threshold'] <= 0:
+        raise ValueError('context_threshold must be a positive token count')
     return result
 
 

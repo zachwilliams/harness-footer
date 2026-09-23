@@ -47,7 +47,7 @@ class InstallTests(unittest.TestCase):
             prefix = Path(temp) / "an install's directory"
             target, wrapper, activation = install.install(prefix)
             custom = {
-                'target_tokens': 180000,
+                'context_threshold': 180000,
                 'claude_show_builtin_status': False,
             }
             (target / 'settings.json').write_text(json.dumps(custom))
