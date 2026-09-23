@@ -1,0 +1,17 @@
+[project]
+name = "harness-footer"
+version = "0.1.0"
+description = "A shared tmux status bar for Codex CLI and Claude Code"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 79
+target-version = "py310"
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "B", "UP", "SIM", "RUF"]

@@ -1,27 +1,41 @@
 #!/usr/bin/env python3
-"""Receive Claude statusLine JSON, cache normalized metrics, preserve its current UI."""
+"""Cache Claude's statusLine metrics for tmux and forward its original status.
+
+Claude runs this as its statusLine command, passing session JSON on stdin.
+"""
+
 import argparse
 import json
-import re
 import subprocess
 import sys
 
-from footer import cache_dir, claude_state, save_json, settings
+from footer import (
+    claude_cache_path,
+    claude_state,
+    is_valid_token,
+    load_settings,
+    save_json,
+)
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--token', required=True)
-    parser.add_argument('--forward', default='')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--token', required=True, help='Per-launch cache key')
+    parser.add_argument(
+        '--forward', default='', help="The user's original statusLine command"
+    )
     args = parser.parse_args()
-    raw = sys.stdin.read()
-    try:
-        if re.fullmatch(r'[a-f0-9]{32}', args.token):
-            save_json(cache_dir() / f'claude-{args.token}.json', claude_state(json.loads(raw)))
-    except (OSError, ValueError, TypeError, AttributeError):
-        pass  # A cache failure must not break the existing status line.
-    if args.forward and settings().get('claude_show_builtin_status', True):
-        subprocess.run(args.forward, shell=True, input=raw, text=True, check=False)
+    payload = sys.stdin.read()
+    if is_valid_token(args.token):
+        try:
+            state = claude_state(json.loads(payload))
+            save_json(claude_cache_path(args.token), state)
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass  # A cache failure must not break the existing status line.
+    if args.forward and load_settings()['claude_show_builtin_status']:
+        subprocess.run(
+            args.forward, shell=True, input=payload, text=True, check=False
+        )
 
 
 if __name__ == '__main__':

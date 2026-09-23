@@ -16,6 +16,15 @@ are shared. The app prefix is bold and stays visible as the terminal narrows.
 Model windows use lowercase `k`/`m` without the word `context`. Cumulative
 tokens are not displayed.
 
+> [!WARNING]
+> **Not yet suitable if you use tmux for window management.** harness-footer
+> is built for people who run the CLIs directly in their terminal's own tabs
+> and splits. Inside your own tmux session it replaces that session's status
+> bar, and the replacement stays after the CLI exits. It also leaves your
+> key settings alone, so Shift+Enter depends on your own configuration.
+> Outside tmux it starts a separate tmux server with no prefix key, so your
+> usual tmux bindings don't work there. See [Terminal behavior](#terminal-behavior).
+
 ## Requirements
 
 - macOS or Linux, including WSL; native Windows is not supported.
@@ -136,16 +145,38 @@ See [Claude's status-line data documentation](https://code.claude.com/docs/en/st
 ## Terminal behavior
 
 Each ordinary terminal pane gets its own tmux session on the `harness-footer`
-server. Continue using iTerm tabs and splits normally. In an existing tmux
-session, the status bar follows the active pane instead of nesting tmux.
-The status configuration is applied to that existing session.
+server. Continue using iTerm tabs and splits normally.
 
-Exiting the CLI returns to the original shell. Ctrl+B then D detaches; reattach:
+In an existing tmux session, harness-footer runs in the current pane instead of
+nesting tmux. It overwrites that session's `status`, `status-position`,
+`status-interval`, `status-style` and `status-format[0]`, and those settings
+stay until the session ends. The footer shows whichever pane is active, so
+other splits in the same window don't get their own footer.
+
+The dedicated server is configured so the CLIs behave as they do outside tmux:
+
+- Shift+Enter and other modified keys reach the CLI (`extended-keys always`).
+- There is no tmux prefix key, so Ctrl+B and every other shortcut reach the CLI.
+- The mouse wheel scrolls tmux history, because the terminal's own scrollback
+  cannot see output inside tmux. Dragging selects and copies; in iTerm2, hold
+  Option for native selection.
+- Notifications, clipboard writes, focus changes and window titles are passed
+  through to the terminal.
+
+Inside your own tmux session these server options are left alone. Add the
+`extended-keys` lines from `tmux.conf` to your configuration for Shift+Enter.
+
+Exiting the CLI returns to the original shell. To detach or reattach from
+another terminal:
 
 ```sh
 tmux -L harness-footer list-sessions
+tmux -L harness-footer detach-client -s claude-SESSION_ID
 tmux -L harness-footer attach-session -t claude-SESSION_ID
 ```
+
+A running server keeps its old options after `tmux.conf` changes; apply them
+with `tmux -L harness-footer source-file tmux.conf`.
 
 Help, version, administrative subcommands, `codex exec`, `claude -p`, redirected
 input/output, and Claude background/cloud/bare/safe modes bypass the wrapper.
@@ -164,14 +195,15 @@ rollout reader. Codex rollout schema changes may require reader updates.
 cd ~/.config/harness-footer
 python3 -m unittest discover -v
 python3 test_tmux.py
+ruff format --check . && ruff check .  # style: PEP 8, configured in pyproject.toml
 python3 footer.py --app codex --demo 173000 --plain
 python3 footer.py --app claude --demo 173000 --plain
 ```
 
 The tmux test uses an isolated temporary socket and fake CLI processes; it checks
-independent Claude metrics, Codex launch flags, bottom positioning, and 140/80
-column layouts without sending model requests. A live conversation remains the
-final visual check in your terminal.
+independent Claude metrics, Codex launch flags, bottom positioning, 140/80
+column layouts, and Shift+Enter delivery without sending model requests. A live
+conversation remains the final visual check in your terminal.
 
 Installer tests use temporary directories, including paths with spaces and
 apostrophes. They check argument forwarding, settings preservation, startup-file
