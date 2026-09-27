@@ -1,4 +1,4 @@
 {
   "context_threshold": 200000,
-  "claude_show_builtin_status": true
+  "claude_forward_status_line": true
 }

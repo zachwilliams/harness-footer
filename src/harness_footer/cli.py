@@ -10,8 +10,9 @@ usage: harness-footer <command> [arguments]
 commands:
   claude [args]   run Claude Code with the footer
   codex [args]    run Codex CLI with the footer
+  omnigent [args] run Omnigent with the footer
   status          print the footer line (try: status --demo 173000 --plain)
-  setup           add the claude and codex shell functions to your shell
+  setup           add the harness shell functions to your shell
   claude-status   Claude's statusLine command, used internally
 """
 

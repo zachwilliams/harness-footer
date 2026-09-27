@@ -1,7 +1,7 @@
 # harness-footer
 
-A tmux status bar for Codex CLI and Claude Code. It shows the model, context
-usage, quota usage and cost of the session you're working in.
+A tmux status bar for Codex CLI, Claude Code and Omnigent. It shows the model,
+context usage, quota usage and cost of the session you're working in.
 
 ```text
 claude | Opus 5.5 (1m) | project | [main]* | ctx[███░│░░░░░░░░░░░░░░░░] 173K 17% | quota[██████░░░░] 5h 42% 7d 57% | API est $1.23
@@ -9,7 +9,7 @@ claude | Opus 5.5 (1m) | project | [main]* | ctx[███░│░░░░░�
 
 | Segment | Example | What it shows |
 | --- | --- | --- |
-| Harness | `claude` | The CLI running in this pane: `claude` or `codex` |
+| Harness | `claude` | The CLI running in this pane: `claude`, `codex`, or `omnigent:<harness>` |
 | Model | `Opus 5.5 (1m)` | Model name and context window size |
 | Working directory | `project` | Name of the current directory |
 | Git branch | `[main]*` | Current branch; `*` means uncommitted changes |
@@ -37,7 +37,7 @@ it, set this in `settings.json`:
 ## Install
 
 You need macOS or Linux (including WSL), Python 3.11+, tmux 3.2+, Git and
-`lsof`, plus Codex CLI or Claude Code.
+`lsof`, plus Codex CLI, Claude Code or Omnigent.
 
 ```sh
 uv tool install git+https://github.com/zachwilliams/harness-footer
@@ -54,13 +54,15 @@ up the file first:
 # >>> harness-footer >>>
 claude() { harness-footer claude "$@"; }
 codex() { harness-footer codex "$@"; }
+omnigent() { harness-footer omnigent "$@"; }
 # <<< harness-footer <<<
 ```
 
-Use `--shell bash` or `--shell zsh` to pick the shell, `--shell-rc PATH` to
-edit a different startup file, or `--print` to print the lines and add them
-yourself. To skip the footer for one run, use `command claude` or
-`command codex`.
+The functions are always defined; one for a CLI you don't have just reports
+that it isn't on PATH. Use `--shell bash` or `--shell zsh` to pick the shell,
+`--shell-rc PATH` to edit a different startup file, or `--print` to print the
+lines and add them yourself. To skip the footer for one run, use
+`command claude`, `command codex` or `command omnigent`.
 
 ## Settings
 
@@ -70,7 +72,12 @@ yourself. To skip the footer for one run, use `command claude` or
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `context_threshold` | `200000` | Tokens at which the context bar turns yellow |
-| `claude_show_builtin_status` | `true` | Set to `false` to hide Claude's own status line |
+| `claude_forward_status_line` | `true` | Set to `false` to stop running your own `statusLine` command |
+
+`claude_forward_status_line` only affects sessions launched through
+harness-footer, and only if you have a `statusLine` command of your own. To
+remove Claude's status line everywhere, delete `statusLine` from
+`~/.claude/settings.json` instead.
 
 ## Uninstall
 
@@ -98,6 +105,15 @@ The status bar runs `harness-footer status` every two seconds.
 - **Codex:** the footer finds the `codex` process in the pane and reads its
   rollout file from where it last stopped. Codex runs with `--no-daemon` so
   the file belongs to that process.
+- **Omnigent:** omnigent installs its own `statusLine` wrapper and owns
+  Claude's single `--settings` value, so the footer stays out of its way and
+  reads the bridge directory omnigent already writes,
+  `<harness>-native/<id>/context_raw.json` (or `context.json`). Harnesses
+  disagree on where that lives, so both roots are scanned:
+  `<tmp>/omnigent-<uid>/` (claude-native) and `~/.omnigent/`
+  (antigravity-native). The footer shows `omnigent:claude` for the harness that
+  bridge belongs to. When several are live it picks the one whose own payload
+  reports this pane's directory.
 
 Cached usage is written to `~/.cache/harness-footer` (or
 `$XDG_CACHE_HOME/harness-footer`) with mode 0600. It never contains
@@ -150,10 +166,35 @@ The footer is skipped for help, version, admin subcommands, `codex exec`,
 `claude -p`, redirected input or output, and Claude's background, cloud, bare
 and safe modes.
 
+### Omnigent coverage
+
+Omnigent launches thirteen harnesses, but only `claude-native` writes a bridge
+context file today, so only `omnigent claude` reports usage:
+
+| Harness | What the footer shows |
+| --- | --- |
+| `omnigent claude` | Everything: model, context, quota and cost |
+| Every other harness | Directory and git branch; `ctx: awaiting usage` |
+
+The reader scans any `<harness>-native` bridge directory rather than only
+`claude-native`, so a harness that starts writing `context.json` is picked up
+with no change here.
+
+Reasons the others report nothing. `polly` and `debby` are omnigent's own
+multi-agent orchestrators, not wrapped harnesses, so they have no bridge
+context file at all. `omnigent codex` drives Codex through its app-server
+socket rather than an interactive process with a rollout file, which is the
+same app-server limitation listed below; the footer still falls back to the
+Codex rollout reader in case a plain `codex` process is present. And
+`omnigent agy` runs Antigravity inside omnigent's own tmux server, so the
+footer's pane holds omnigent rather than the harness — see
+[Terminal behavior](#terminal-behavior). Its bridge directory carries the
+relay and session state but no context file.
+
 ### Limitations
 
-- Tested on macOS with tmux 3.7c, Codex 0.156.1 and Claude Code 2.1.280.
-  Linux should work but hasn't been tested in a live session.
+- Tested on macOS with tmux 3.7c, Codex 0.156.1, Claude Code 2.1.280 and
+  Omnigent 0.13.0. Linux should work but hasn't been tested in a live session.
 - Managed Claude policies that block custom status line commands stop the
   Claude metrics.
 - Codex usage from a remote app-server isn't supported. Changes to the Codex
@@ -166,10 +207,11 @@ The code lives in `src/harness_footer/`:
 | File | Role |
 | --- | --- |
 | `cli.py` | The `harness-footer` command and its subcommands |
-| `launch.py` | `claude` and `codex`: run the CLI inside tmux with the footer |
+| `launch.py` | `claude`, `codex` and `omnigent`: run the CLI inside tmux |
 | `footer.py` | `status`: the tmux status command |
 | `render.py` | Formats usage as a status line that fits the width |
 | `claude_usage.py` | Reads Claude's status line data |
+| `omnigent_usage.py` | Reads the bridge directory omnigent writes |
 | `codex_usage.py` | Finds and reads Codex rollout files |
 | `claude_status.py` | `claude-status`: Claude's status line command |
 | `shell_setup.py` | `setup`: adds the shell functions |

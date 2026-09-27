@@ -190,6 +190,9 @@ def model_name(state):
 
 def render(state, cwd, git, config, width=200):
     app = state.get('app') or 'codex'
+    launcher = state.get('launcher')
+    if launcher and launcher != app:
+        app = f'{launcher}:{app}'
     model = model_name(state)
     window = non_negative_number(state.get('window'))
     if window:

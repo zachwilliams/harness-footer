@@ -34,7 +34,7 @@ def main(argv):
             save_json(claude_cache_path(args.token), state)
         except (OSError, ValueError, TypeError, AttributeError):
             pass  # A cache failure must not break the existing status line.
-    if args.forward and load_settings()['claude_show_builtin_status']:
+    if args.forward and load_settings()['claude_forward_status_line']:
         subprocess.run(
             args.forward, shell=True, input=payload, text=True, check=False
         )

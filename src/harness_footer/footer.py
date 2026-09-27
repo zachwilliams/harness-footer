@@ -16,6 +16,7 @@ from harness_footer.common import (
     load_settings,
     read_json,
 )
+from harness_footer.omnigent_usage import LAUNCHER, omnigent_state
 from harness_footer.render import render, strip_styles, style
 
 
@@ -52,12 +53,23 @@ def pane_state(socket, pane):
     pid, cwd, app, token = fields.split('\t')
     if app == 'claude' and is_valid_token(token):
         return cached_claude_state(token), cwd
+    if app == LAUNCHER:
+        # `omnigent codex` still runs a real codex, so its rollout is the
+        # fallback for the harnesses that write no bridge context file.
+        state = omnigent_state(cwd) or codex_state(int(pid))
+        if not state:
+            return {'app': LAUNCHER}, cwd
+        return state | {'launcher': LAUNCHER}, cwd
     return codex_state(int(pid)), cwd
 
 
 def demo_state(app, context):
+    # Omnigent is a launcher, so the demo shows it in front of a harness.
+    launcher = app if app == LAUNCHER else None
+    app = 'claude' if launcher else app
     state = {
         'app': app,
+        'launcher': launcher,
         'model': 'GPT-6-Astra' if app == 'codex' else 'Opus',
         'context': context,
         'window': 1_000_000,
@@ -89,7 +101,9 @@ def parse_args(argv):
         metavar='TOKENS',
         help='Preview a context count in a 1M window',
     )
-    parser.add_argument('--app', choices=['codex', 'claude'], default='codex')
+    parser.add_argument(
+        '--app', choices=['codex', 'claude', 'omnigent'], default='codex'
+    )
     parser.add_argument(
         '--rollout', help='Read this Codex rollout file (for debugging)'
     )

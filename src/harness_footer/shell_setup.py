@@ -1,4 +1,4 @@
-"""The `setup` command: route `claude` and `codex` through harness-footer."""
+"""The `setup` command: route the harness commands through harness-footer."""
 
 import argparse
 import os
@@ -16,6 +16,7 @@ END_MARKER = '# <<< harness-footer <<<'
 SHELL_BLOCK = f"""{BEGIN_MARKER}
 claude() {{ harness-footer claude "$@"; }}
 codex() {{ harness-footer codex "$@"; }}
+omnigent() {{ harness-footer omnigent "$@"; }}
 {END_MARKER}
 """
 
@@ -129,4 +130,4 @@ def main(argv):
             'harness-footer is not on your PATH yet; '
             'run `uv tool update-shell` to fix that.'
         )
-    print('Open a new shell, then run claude or codex.')
+    print('Open a new shell, then run claude, codex or omnigent.')

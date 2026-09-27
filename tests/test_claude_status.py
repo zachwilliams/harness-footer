@@ -36,9 +36,9 @@ class ClaudeStatusTests(unittest.TestCase):
                 self.assertEqual(cached['session_id'], session)
                 self.assertEqual(cache.stat().st_mode & 0o777, 0o600)
 
-    def test_hiding_builtin_status_still_caches_metrics(self):
+    def test_not_forwarding_still_caches_metrics(self):
         token = 'c' * 32
-        settings = {'claude_show_builtin_status': False}
+        settings = {'claude_forward_status_line': False}
         argv = ['--token', token, '--forward', 'cat']
         stdin = io.StringIO(json.dumps(claude_payload()))
         with (
@@ -59,6 +59,23 @@ class ClaudeStatusTests(unittest.TestCase):
                 temp, 'cache', 'harness-footer', f'claude-{token}.json'
             )
             self.assertTrue(cache.exists())
+
+    def test_legacy_setting_name_still_hides_the_status_line(self):
+        token = 'd' * 32
+        argv = ['--token', token, '--forward', 'cat']
+        stdin = io.StringIO(json.dumps(claude_payload()))
+        with (
+            tempfile.TemporaryDirectory() as temp,
+            patch.dict(os.environ, isolated_environment(temp)),
+            patch.object(sys, 'stdin', stdin),
+            patch('harness_footer.claude_status.subprocess.run') as forward,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            settings = Path(temp, 'config', 'harness-footer', 'settings.json')
+            settings.parent.mkdir(parents=True)
+            settings.write_text('{"claude_show_builtin_status": false}')
+            claude_status.main(argv)
+            forward.assert_not_called()
 
 
 if __name__ == '__main__':

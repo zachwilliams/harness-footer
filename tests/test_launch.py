@@ -16,6 +16,11 @@ class LaunchTests(unittest.TestCase):
             ('claude', ['--version']),
             ('claude', ['--background']),
             ('claude', ['hello', '-p']),
+            ('omnigent', ['doctor']),
+            ('omnigent', ['--version']),
+            ('omnigent', ['claude', '-p', 'hello']),
+            ('omnigent', ['--debug', 'claude', '--print']),
+            ('omnigent', ['codex', 'exec', 'hi']),
         ]
         for app, args in cases:
             self.assertTrue(launch.is_non_interactive(app, args), (app, args))
@@ -30,6 +35,12 @@ class LaunchTests(unittest.TestCase):
             ('claude', ['--resume', 'mcp']),
             ('claude', ['--', '--print']),
             ('claude', ['--model', '--help']),
+            ('omnigent', []),
+            ('omnigent', ['claude']),
+            ('omnigent', ['polly']),
+            ('omnigent', ['--debug', 'codex', '--model', 'x']),
+            ('omnigent', ['resume']),
+            ('omnigent', ['--', 'doctor']),
         ]
         for app, args in cases:
             self.assertFalse(launch.is_non_interactive(app, args), (app, args))

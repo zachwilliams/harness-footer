@@ -1,4 +1,4 @@
-"""The `claude` and `codex` commands: run a CLI inside tmux with the footer."""
+"""The `claude`, `codex` and `omnigent` commands: run a CLI inside tmux."""
 
 import json
 import os
@@ -37,13 +37,24 @@ SUBCOMMANDS = {
         'project', 'remote-control', 'respawn', 'rm', 'setup-token', 'stop',
         'ultrareview', 'update', 'upgrade',
     }),
+    'omnigent': frozenset({
+        'config', 'debug', 'diagnose', 'doctor', 'extensions', 'help', 'host',
+        'import', 'integration', 'login',
+    }),
 }  # fmt: skip
+# The harnesses omnigent can launch. They are subcommands but they open an
+# interactive session, so they keep the footer rather than skipping it.
+OMNIGENT_HARNESSES = frozenset({
+    'agy', 'claude', 'codex', 'cursor', 'debby', 'goose', 'hermes', 'kimi',
+    'kiro', 'opencode', 'pi', 'polly', 'qwen',
+})  # fmt: skip
 NON_INTERACTIVE_SWITCHES = {
     'codex': frozenset({'-h', '--help', '--version', '-V'}),
     'claude': frozenset({
         '-h', '--help', '--version', '-v', '-p', '--print', '--bg',
         '--background', '--cloud', '--bare', '--safe-mode',
     }),
+    'omnigent': frozenset({'-h', '--help', '--version'}),
 }  # fmt: skip
 VALUE_FLAGS = {
     'codex': frozenset({
@@ -62,11 +73,13 @@ VALUE_FLAGS = {
         '--setting-sources', '--settings', '--system-prompt',
         '--system-prompt-file', '--system-prompt-snapshot',
     }),
+    'omnigent': frozenset(),
 }  # fmt: skip
 # Flags whose following word may be an optional or variadic value, so it
 # cannot be treated as a subcommand.
 OPTIONAL_VALUE_FLAGS = {
     'codex': frozenset(),
+    'omnigent': frozenset(),
     'claude': frozenset({
         '--add-dir', '--allowed-tools', '--allowedTools', '--betas', '-d',
         '--debug', '--disallowed-tools', '--disallowedTools', '--file',
@@ -88,8 +101,27 @@ FORWARDED_ENVIRONMENT = (
 CLAUDE_SETTING_SOURCES = frozenset({'user', 'project', 'local'})
 
 
+def nested_harness(args):
+    """Return the harness omnigent will launch, and its own arguments."""
+    for i, arg in enumerate(args):
+        if arg == '--':
+            return None
+        if not arg.startswith('-'):
+            # omnigent's own options before the harness are all switches,
+            # so the first bare word is the harness name.
+            if arg in OMNIGENT_HARNESSES and arg in NON_INTERACTIVE_SWITCHES:
+                return arg, args[i + 1 :]
+            return None
+    return None
+
+
 def is_non_interactive(app, args):
     """Return True if args run a subcommand, print mode, help or version."""
+    if app == 'omnigent':
+        # `omnigent claude -p ...` is as non-interactive as `claude -p ...`.
+        nested = nested_harness(args)
+        if nested:
+            return is_non_interactive(*nested)
     may_be_subcommand = True
     i = 0
     while i < len(args):
@@ -232,6 +264,10 @@ def run_in_current_pane(app, executable, args):
     token = uuid.uuid4().hex
     if app == 'codex':
         app_args = ['--no-daemon', '-c', 'tui.status_line=[]', *args]
+    elif app == 'omnigent':
+        # Omnigent installs its own statusLine wrapper and owns Claude's
+        # single --settings value, so the footer reads its bridge instead.
+        app_args = list(args)
     else:
         app_args = claude_arguments(args, token)
     configure_tmux(app, token)

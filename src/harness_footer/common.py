@@ -14,7 +14,11 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 SELF_COMMAND = (sys.executable, '-P', '-m', 'harness_footer')
 DEFAULTS = {
     'context_threshold': 200_000,
-    'claude_show_builtin_status': True,
+    'claude_forward_status_line': True,
+}
+# Settings files written before this key was renamed still use the old name.
+LEGACY_SETTING_NAMES = {
+    'claude_show_builtin_status': 'claude_forward_status_line'
 }
 MINUTES_PER_HOUR = 60
 MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
@@ -63,7 +67,11 @@ def settings_path():
 
 
 def load_settings():
-    result = DEFAULTS | read_json(settings_path())
+    stored = read_json(settings_path())
+    for old, new in LEGACY_SETTING_NAMES.items():
+        if old in stored and new not in stored:
+            stored[new] = stored[old]
+    result = DEFAULTS | stored
     result['context_threshold'] = int(result['context_threshold'])
     if result['context_threshold'] <= 0:
         raise ValueError('context_threshold must be a positive token count')
