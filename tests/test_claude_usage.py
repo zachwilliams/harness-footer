@@ -13,7 +13,10 @@ class ClaudeStateTests(unittest.TestCase):
             'cost': {'total_cost_usd': 5.25},
         }
         state = claude_state(data)
-        self.assertIn('spend 125%', strip_styles(quota_segment(state)))
+        quota = strip_styles(quota_segment(state))
+        # A lone window is still the worst one, so it carries the bar.
+        self.assertIn('spend[', quota)
+        self.assertTrue(quota.endswith('] 125%'), quota)
         self.assertEqual(state['estimated_cost_usd'], 5.25)
 
     def test_context_includes_cache_but_not_output(self):
@@ -21,7 +24,8 @@ class ClaudeStateTests(unittest.TestCase):
         self.assertEqual(state['context'], 173_000)
         self.assertEqual(state['window'], 1_000_000)
         self.assertNotIn('total', state)
-        self.assertIn('5h 42% 7d 57%', strip_styles(quota_segment(state)))
+        # 7d is closer to its limit, so it takes the bar and 5h stays plain.
+        self.assertIn('5h 42% - 7d[', strip_styles(quota_segment(state)))
 
     def test_compaction_startup_and_absent_quota(self):
         data = claude_payload()

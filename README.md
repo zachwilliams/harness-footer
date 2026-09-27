@@ -4,7 +4,13 @@ A tmux status bar for Codex CLI, Claude Code and Omnigent. It shows the model,
 context usage, quota usage and cost of the session you're working in.
 
 ```text
-claude | Opus 5.5 (1m) | project | [main]* | ctx[███░│░░░░░░░░░░░░░░░░] 173K 17% | quota[██████░░░░] 5h 42% 7d 57% | API est $1.23
+claude | Opus 5.5 (1m) | project | [main]* | ctx[███░│░░░░░░░░░░░░░░░░] 173K 17% | quota 5h 42% - 7d[██████░░░░] 57%
+```
+
+Without a quota to report, the session shows a cost estimate instead:
+
+```text
+claude | Opus 5.5 (1m) | project | [main]* | ctx[███░│░░░░░░░░░░░░░░░░] 173K 17% | API est $1.23
 ```
 
 | Segment | Example | What it shows |
@@ -14,8 +20,8 @@ claude | Opus 5.5 (1m) | project | [main]* | ctx[███░│░░░░░�
 | Working directory | `project` | Name of the current directory |
 | Git branch | `[main]*` | Current branch; `*` means uncommitted changes |
 | Context usage | `ctx[███░│░░…] 173K 17%` | Tokens in context and percentage of the window used |
-| Quota usage | `quota[██████░░░░] 5h 42% 7d 57%` | Percentage used of each rate-limit window |
-| Cost estimate | `API est $1.23` | Claude's estimate of the session cost at API prices |
+| Quota usage | `quota 5h 42% - 7d[██████░░░░] 57%` | Percentage used of each rate-limit window; the one closest to its limit gets the bar |
+| Cost estimate | `API est $1.23` | Claude's estimate of the session cost at API prices, shown only when no quota is reported |
 
 The context bar is 20 blocks wide and covers the model's whole context window.
 The `│` marks the context threshold, 200K tokens by default. The bar turns
@@ -125,10 +131,13 @@ transcript text or credentials, and the footer makes no network requests.
   Claude's own context percentage. After startup or compaction the footer
   shows `ctx: awaiting usage` until new numbers arrive.
 - **Quota:** percentage used, per window. Hidden when the CLI doesn't report
-  it. Enterprise spend limits appear as `spend`.
+  it. Enterprise spend limits appear as `spend`. Only the window closest to
+  its limit is drawn as a bar, since that is the one that will stop you
+  first; the others stay as plain numbers.
 - **Cost:** Claude's `cost.total_cost_usd` for the whole session, estimated at
-  API prices. What you're billed can differ. Codex doesn't report cost, so no
-  cost is shown for Codex.
+  API prices. What you're billed can differ. It is shown only when the session
+  reports no quota, because the quota is the limit you actually run into.
+  Codex doesn't report cost, so no cost is shown for Codex.
 - **Narrow terminals:** labels shorten, then drop, from the model inward.
   The harness name and context usage always stay.
 

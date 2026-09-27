@@ -23,6 +23,7 @@ BACKGROUND = '#1a1b26'
 WARN_PERCENT = 50
 ALERT_PERCENT = 80
 CONTEXT_BAR_WIDTH = 20
+QUOTA_BAR_WIDTH = 10
 CONTEXT_ALERT_FRACTION = 0.9
 CLAUDE_MODEL_ID = re.compile(
     r'claude-(opus|sonnet|haiku|fable)-(\d+)(?:[-.](\d{1,2}))?(?:[-@]|$)'
@@ -160,10 +161,18 @@ def quota_segment(state, compact=False):
             windows.append((window_label(minutes, key), percent))
     if not windows:
         return ''
-    worst = max(percent for _, percent in windows)
-    labels = ' '.join(f'{name} {percent:.0f}%' for name, percent in windows)
-    gauge = '' if compact else f'[{bar(worst, 100, 10)}]'
-    return style(f'quota{gauge} {labels}', percent_color(worst))
+    # Only the window closest to its limit is worth a bar; the rest are
+    # context for it, so they stay as plain numbers.
+    worst = max(range(len(windows)), key=lambda i: windows[i][1])
+    labels = []
+    for i, (name, percent) in enumerate(windows):
+        gauge = ''
+        if i == worst and not compact:
+            gauge = f'[{bar(percent, 100, QUOTA_BAR_WIDTH)}]'
+        labels.append(f'{name}{gauge} {percent:.0f}%')
+    return style(
+        'quota ' + ' - '.join(labels), percent_color(windows[worst][1])
+    )
 
 
 def cost_segment(state):
@@ -204,7 +213,9 @@ def render(state, cwd, git, config, width=200):
     compact_context = context_segment(state, config, compact=True)
     quota = quota_segment(state)
     compact_quota = quota_segment(state, compact=True)
-    cost = cost_segment(state)
+    # Quota is the better signal when the plan reports one, so the API
+    # estimate only appears for sessions without it.
+    cost = '' if quota else cost_segment(state)
 
     layouts_widest_first = [
         [
