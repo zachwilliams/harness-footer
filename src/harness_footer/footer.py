@@ -60,11 +60,11 @@ def pane_state(socket, pane):
     if app == LAUNCHER:
         # `omnigent codex` still runs a real codex, so its rollout is the
         # fallback for the harnesses that write no bridge context file.
+        if load_settings()['omnigent_hide_inner_status']:
+            hide_inner_status_bar(cwd)
         state = omnigent_state(cwd) or codex_state(int(pid))
         if not state:
             return {'app': LAUNCHER}, cwd
-        if load_settings()['omnigent_hide_inner_status']:
-            hide_inner_status_bar(state)
         return state | {'launcher': LAUNCHER}, cwd
     return codex_state(int(pid)), cwd
 

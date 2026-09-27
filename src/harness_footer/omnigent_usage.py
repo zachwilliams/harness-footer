@@ -8,6 +8,7 @@ fight over Claude's single `--settings` value.
 """
 
 import os
+import re
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -25,10 +26,17 @@ LAUNCHER = 'omnigent'
 # The raw statusLine capture comes first: it is the whole payload, so it
 # still carries the rate limits that omnigent's normalized record drops.
 CONTEXT_FILES = ('context_raw.json', 'context.json')
-# Omnigent records the tmux server it runs a harness on beside the context
-# file, which is how the footer finds the one bar it should silence.
+# claude-native records its tmux server here; the other harnesses record
+# none, and are matched to one by the runner pid that owns both.
 TMUX_FILE = 'tmux.json'
+OWNER_FILE = 'owner.pid'
+TERMINAL_GLOB = f'{LAUNCHER}-terminal-*'
 SILENCED_CACHE = 'omnigent-silenced.json'
+# Bridge directories are named for a digest; siblings like
+# `codex-native/process-owners` are bookkeeping, not sessions.
+BRIDGE_ID = re.compile(r'[0-9a-f]{32}\Z')
+# Files naming the directory a bridge's harness is working in.
+WORKSPACE_FIELDS = (('state.json', 'cwd'), ('bridge.json', 'workspace'))
 
 
 def omnigent_home():
@@ -54,8 +62,8 @@ def bridge_roots():
     return sorted(set(roots))
 
 
-def context_files():
-    """Return (harness, path) for every bridge context file on disk."""
+def bridge_dirs():
+    """Return (harness, directory) for every omnigent bridge on disk."""
     found = []
     for root in bridge_roots():
         for harness_dir in sorted(root.glob('*-native')):
@@ -64,13 +72,93 @@ def context_files():
                 bridges = sorted(harness_dir.iterdir())
             except OSError:
                 continue
-            for bridge in bridges:
-                for name in CONTEXT_FILES:
-                    path = bridge / name
-                    if path.is_file():
-                        found.append((harness, path))
-                        break  # One record per bridge, raw preferred.
+            found += [
+                (harness, b)
+                for b in bridges
+                if b.is_dir() and BRIDGE_ID.match(b.name)
+            ]
     return found
+
+
+def context_files():
+    """Return (harness, path) for every bridge context file on disk."""
+    found = []
+    for harness, bridge in bridge_dirs():
+        for name in CONTEXT_FILES:
+            path = bridge / name
+            if path.is_file():
+                found.append((harness, path))
+                break  # One record per bridge, raw preferred.
+    return found
+
+
+def read_pid_file(path):
+    try:
+        return path.read_text().strip()
+    except OSError:
+        return ''
+
+
+def terminal_dirs():
+    """Return the private directories omnigent gives its tmux servers."""
+    found = []
+    for parent in {Path(tempfile.gettempdir()), Path('/tmp')}:
+        try:
+            candidates = sorted(parent.glob(TERMINAL_GLOB))
+        except OSError:
+            continue
+        for terminal in candidates:
+            try:
+                if terminal.stat().st_uid == os.getuid():
+                    found.append(terminal)
+            except OSError:
+                continue
+    return found
+
+
+def bridge_workspace(bridge):
+    """Return the directory the bridge's harness is working in."""
+    for name, field in WORKSPACE_FIELDS:
+        value = read_json(bridge / name).get(field)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def bridge_for_cwd(cwd):
+    """Return the bridge directory whose harness is working in cwd."""
+    best, best_rank = None, None
+    for _, bridge in bridge_dirs():
+        try:
+            modified = bridge.stat().st_mtime_ns
+        except OSError:
+            continue
+        rank = (bool(cwd) and bridge_workspace(bridge) == cwd, modified)
+        if best_rank is None or rank > best_rank:
+            best, best_rank = bridge, rank
+    return best
+
+
+def inner_tmux_socket(bridge):
+    """Return the tmux socket omnigent runs this bridge's harness on."""
+    socket = read_json(bridge / TMUX_FILE).get('socket_path')
+    if socket:
+        return socket
+    # Only claude-native writes tmux.json. For the rest, the runner that
+    # owns the bridge also owns the terminal directory it created.
+    owner = read_pid_file(bridge / OWNER_FILE)
+    if not owner:
+        return None
+    matches = [
+        terminal
+        for terminal in terminal_dirs()
+        if read_pid_file(terminal / OWNER_FILE) == owner
+    ]
+    if not matches:
+        return None
+    # One runner can own several terminals; the newest is this session's.
+    newest = max(matches, key=lambda path: path.stat().st_mtime_ns)
+    return str(newest / 'tmux.sock')
 
 
 def remote_server():
@@ -96,7 +184,7 @@ def remote_server():
     return None
 
 
-def hide_inner_status_bar(state):
+def hide_inner_status_bar(cwd=None):
     """Turn off the status bar of the tmux server omnigent runs this on.
 
     In server mode omnigent gives each harness a private tmux server with a
@@ -104,15 +192,18 @@ def hide_inner_status_bar(state):
     session. Only the server backing this pane's session is silenced, so
     omnigent sessions running outside the footer keep their own bar.
     """
-    bridge = state.get('bridge_dir')
-    if not bridge:
-        return
-    socket = read_json(Path(bridge) / TMUX_FILE).get('socket_path')
-    if not socket or not Path(socket).exists():
+    terminals = terminal_dirs()
+    if not terminals:
         return
     cache_path = cache_dir() / SILENCED_CACHE
     silenced = set(read_json(cache_path).get('sockets') or [])
-    if socket in silenced:
+    if all(str(t / 'tmux.sock') in silenced for t in terminals):
+        return
+    bridge = bridge_for_cwd(cwd)
+    socket = inner_tmux_socket(bridge) if bridge else None
+    # tmux refuses a socket with no server rather than starting one, but
+    # skipping the call keeps a dead path out of the cache.
+    if not socket or socket in silenced or not Path(socket).exists():
         return
     command_output(['tmux', '-S', socket, 'set-option', '-g', 'status', 'off'])
     # Drop servers that have gone away so the list cannot grow forever.
@@ -155,9 +246,7 @@ def omnigent_state(cwd=None):
             modified = path.stat().st_mtime_ns
         except OSError:
             continue
-        state = bridge_state(harness, record) | {
-            'bridge_dir': str(path.parent)
-        }
+        state = bridge_state(harness, record)
         # Several harnesses can be live at once, so prefer the one whose
         # own payload reports the directory this pane is sitting in.
         rank = (bool(cwd) and state.get('cwd') == cwd, modified)

@@ -185,10 +185,13 @@ background, cloud, bare and safe modes.
 With a `server:` in `~/.omnigent/config.yaml`, omnigent runs every harness on
 a private tmux server of its own rather than as a child of your shell, and
 that server carries a status bar. Inside the footer's session that would
-stack two bars, so the footer silences the inner one. It silences only the
-tmux server recorded in the session's own `tmux.json`, so omnigent sessions
-running outside the footer keep their bar. Set `omnigent_hide_inner_status`
-to `false` to leave them all alone.
+stack two bars, so the footer silences the inner one.
+
+It silences only the server backing this pane's session, so omnigent sessions
+running outside the footer keep their bar. `claude-native` names its server in
+the session's `tmux.json`; the other harnesses name none, and are matched to
+one by the runner pid recorded in both the bridge directory and the terminal
+directory. Set `omnigent_hide_inner_status` to `false` to leave them alone.
 
 The harness still runs on this machine in that mode -- the remote server is
 the control plane, not the executor -- so the bridge context file is local and

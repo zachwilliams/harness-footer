@@ -170,34 +170,75 @@ class InnerStatusBarTests(unittest.TestCase):
         )
         return result.stdout.strip()
 
-    def test_only_the_recorded_tmux_server_is_silenced(self):
-        with tempfile.TemporaryDirectory() as temp:
-            ours = str(Path(temp, 'ours.sock'))
-            theirs = str(Path(temp, 'theirs.sock'))
-            self.start_server(ours)
-            self.start_server(theirs)
-            bridge = Path(temp, 'bridge')
-            bridge.mkdir()
-            (bridge / 'tmux.json').write_text(
-                json.dumps({'socket_path': ours})
-            )
-            with patch.dict(os.environ, isolated_environment(temp)):
-                omnigent_usage.hide_inner_status_bar(
-                    {'bridge_dir': str(bridge)}
-                )
-            self.assertEqual(self.status(ours), 'status off')
-            # An omnigent session running outside the footer keeps its bar.
-            self.assertEqual(self.status(theirs), 'status on')
+    def silence(self, temp, root, terminals, cwd):
+        """Run the suppression against isolated bridge and terminal roots."""
+        with (
+            patch.dict(os.environ, isolated_environment(temp)),
+            patch.object(
+                omnigent_usage, 'bridge_roots', return_value=[Path(root)]
+            ),
+            patch.object(
+                omnigent_usage, 'terminal_dirs', return_value=terminals
+            ),
+        ):
+            omnigent_usage.hide_inner_status_bar(cwd)
 
-    def test_a_bridge_with_no_tmux_server_is_left_alone(self):
+    def terminal(self, parent, name, owner):
+        directory = Path(parent, name)
+        directory.mkdir()
+        (directory / 'owner.pid').write_text(owner)
+        self.start_server(str(directory / 'tmux.sock'))
+        return directory
+
+    def bridge(self, temp, harness, owner=None, socket=None):
+        path = Path(temp, 'root', f'{harness}-native', 'a' * 32)
+        path.mkdir(parents=True)
+        (path / 'state.json').write_text(json.dumps({'cwd': '/w'}))
+        if owner:
+            (path / 'owner.pid').write_text(owner)
+        if socket:
+            (path / 'tmux.json').write_text(
+                json.dumps({'socket_path': str(socket)})
+            )
+        return path
+
+    def test_the_recorded_tmux_server_is_silenced(self):
         with tempfile.TemporaryDirectory() as temp:
-            bridge = Path(temp, 'bridge')
-            bridge.mkdir()
-            with patch.dict(os.environ, isolated_environment(temp)):
-                omnigent_usage.hide_inner_status_bar(
-                    {'bridge_dir': str(bridge)}
-                )
-                omnigent_usage.hide_inner_status_bar({})
+            ours = self.terminal(temp, 'omnigent-terminal-a', '111')
+            theirs = self.terminal(temp, 'omnigent-terminal-b', '222')
+            self.bridge(temp, 'claude', socket=ours / 'tmux.sock')
+            self.silence(temp, Path(temp, 'root'), [ours, theirs], '/w')
+            self.assertEqual(
+                self.status(str(ours / 'tmux.sock')), 'status off'
+            )
+            # An omnigent session outside the footer keeps its own bar.
+            self.assertEqual(
+                self.status(str(theirs / 'tmux.sock')), 'status on'
+            )
+
+    def test_a_harness_without_tmux_json_is_matched_by_owner_pid(self):
+        # codex-native records no tmux.json, but the runner that owns the
+        # bridge also owns the terminal directory it created.
+        with tempfile.TemporaryDirectory() as temp:
+            ours = self.terminal(temp, 'omnigent-terminal-a', '81540')
+            theirs = self.terminal(temp, 'omnigent-terminal-b', '99999')
+            self.bridge(temp, 'codex', owner='81540')
+            self.silence(temp, Path(temp, 'root'), [ours, theirs], '/w')
+            self.assertEqual(
+                self.status(str(ours / 'tmux.sock')), 'status off'
+            )
+            self.assertEqual(
+                self.status(str(theirs / 'tmux.sock')), 'status on'
+            )
+
+    def test_an_unmatched_bridge_silences_nothing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            theirs = self.terminal(temp, 'omnigent-terminal-b', '222')
+            self.bridge(temp, 'codex', owner='no-such-runner')
+            self.silence(temp, Path(temp, 'root'), [theirs], '/w')
+            self.assertEqual(
+                self.status(str(theirs / 'tmux.sock')), 'status on'
+            )
 
 
 if __name__ == '__main__':
