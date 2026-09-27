@@ -48,6 +48,10 @@ OMNIGENT_HARNESSES = frozenset({
     'agy', 'claude', 'codex', 'cursor', 'debby', 'goose', 'hermes', 'kimi',
     'kiro', 'opencode', 'pi', 'polly', 'qwen',
 })  # fmt: skip
+# Harnesses omnigent runs on its own tmux server. Wrapping one would nest
+# tmux in tmux, and the footer's pane would hold omnigent rather than the
+# harness, so let them through untouched.
+OMNIGENT_OWN_TERMINAL = frozenset({'agy'})
 NON_INTERACTIVE_SWITCHES = {
     'codex': frozenset({'-h', '--help', '--version', '-V'}),
     'claude': frozenset({
@@ -109,19 +113,31 @@ def nested_harness(args):
         if not arg.startswith('-'):
             # omnigent's own options before the harness are all switches,
             # so the first bare word is the harness name.
-            if arg in OMNIGENT_HARNESSES and arg in NON_INTERACTIVE_SWITCHES:
+            if arg in OMNIGENT_HARNESSES:
                 return arg, args[i + 1 :]
             return None
     return None
 
 
+def runs_own_terminal(app, args):
+    """Return True if the CLI brings its own tmux, so the footer stays out."""
+    if app != 'omnigent':
+        return False
+    nested = nested_harness(args)
+    return bool(nested) and nested[0] in OMNIGENT_OWN_TERMINAL
+
+
 def is_non_interactive(app, args):
     """Return True if args run a subcommand, print mode, help or version."""
     if app == 'omnigent':
-        # `omnigent claude -p ...` is as non-interactive as `claude -p ...`.
         nested = nested_harness(args)
         if nested:
-            return is_non_interactive(*nested)
+            # `omnigent claude -p ...` is as non-interactive as `claude -p ...`
+            # for the harnesses whose arguments the footer knows.
+            harness, rest = nested
+            if harness not in NON_INTERACTIVE_SWITCHES:
+                return False
+            return is_non_interactive(harness, rest)
     may_be_subcommand = True
     i = 0
     while i < len(args):
@@ -295,7 +311,11 @@ def main(app, args):
     if inside_tmux:
         args = args[1:]
     has_terminal = sys.stdin.isatty() and sys.stdout.isatty()
-    if is_non_interactive(app, args) or not (inside_tmux or has_terminal):
+    if (
+        is_non_interactive(app, args)
+        or runs_own_terminal(app, args)
+        or not (inside_tmux or has_terminal)
+    ):
         os.execv(executable, [executable, *args])
     if not shutil.which(TMUX):
         raise SystemExit(

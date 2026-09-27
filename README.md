@@ -163,8 +163,8 @@ After editing `src/harness_footer/tmux.conf`, apply it to a running server
 with `tmux -L harness-footer source-file src/harness_footer/tmux.conf`.
 
 The footer is skipped for help, version, admin subcommands, `codex exec`,
-`claude -p`, redirected input or output, and Claude's background, cloud, bare
-and safe modes.
+`claude -p`, `omnigent agy`, redirected input or output, and Claude's
+background, cloud, bare and safe modes.
 
 ### Omnigent coverage
 
@@ -174,22 +174,25 @@ context file today, so only `omnigent claude` reports usage:
 | Harness | What the footer shows |
 | --- | --- |
 | `omnigent claude` | Everything: model, context, quota and cost |
+| `omnigent agy` | Nothing; the footer is skipped, see below |
 | Every other harness | Directory and git branch; `ctx: awaiting usage` |
 
 The reader scans any `<harness>-native` bridge directory rather than only
 `claude-native`, so a harness that starts writing `context.json` is picked up
 with no change here.
 
-Reasons the others report nothing. `polly` and `debby` are omnigent's own
-multi-agent orchestrators, not wrapped harnesses, so they have no bridge
-context file at all. `omnigent codex` drives Codex through its app-server
-socket rather than an interactive process with a rollout file, which is the
-same app-server limitation listed below; the footer still falls back to the
-Codex rollout reader in case a plain `codex` process is present. And
-`omnigent agy` runs Antigravity inside omnigent's own tmux server, so the
-footer's pane holds omnigent rather than the harness — see
-[Terminal behavior](#terminal-behavior). Its bridge directory carries the
-relay and session state but no context file.
+Why the others report nothing:
+
+- `polly` and `debby` are omnigent's own multi-agent orchestrators rather than
+  wrapped harnesses, so they have no bridge context file at all.
+- `omnigent codex` drives Codex through its app-server socket rather than an
+  interactive process with a rollout file, the same app-server limitation
+  listed below. The footer still falls back to the Codex rollout reader in
+  case a plain `codex` process is present.
+- `omnigent agy` is skipped entirely. Omnigent runs Antigravity on its own
+  tmux server, so wrapping it would nest tmux in tmux and leave the footer's
+  pane holding omnigent rather than the harness. It runs exactly as it would
+  without harness-footer.
 
 ### Limitations
 

@@ -41,9 +41,26 @@ class LaunchTests(unittest.TestCase):
             ('omnigent', ['--debug', 'codex', '--model', 'x']),
             ('omnigent', ['resume']),
             ('omnigent', ['--', 'doctor']),
+            ('omnigent', ['agy']),
         ]
         for app, args in cases:
             self.assertFalse(launch.is_non_interactive(app, args), (app, args))
+
+    def test_agy_keeps_its_own_terminal(self):
+        # agy is interactive, but omnigent runs it on its own tmux server,
+        # so the footer must not wrap it a second time.
+        own = [
+            ['agy'],
+            ['agy', '--model', 'gemini'],
+            ['--debug', 'agy'],
+            ['agy', '-r', 'conv_x'],
+        ]
+        for args in own:
+            self.assertTrue(launch.runs_own_terminal('omnigent', args), args)
+        others = [['claude'], ['polly'], ['codex'], [], ['--', 'agy']]
+        for args in others:
+            self.assertFalse(launch.runs_own_terminal('omnigent', args), args)
+        self.assertFalse(launch.runs_own_terminal('claude', ['agy']))
 
     def test_explicit_settings_preserved_and_original_forwarded(self):
         original = {
