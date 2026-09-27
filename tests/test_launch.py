@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from harness_footer import launch
+from harness_footer import launch, shell_setup
 
 
 class LaunchTests(unittest.TestCase):
@@ -45,6 +45,18 @@ class LaunchTests(unittest.TestCase):
         ]
         for app, args in cases:
             self.assertFalse(launch.is_non_interactive(app, args), (app, args))
+
+    def test_omni_is_treated_as_omnigent(self):
+        # Omnigent ships `omni` and `omnigent` as separate console scripts;
+        # wrapping only one lets the other bypass the footer entirely.
+        self.assertEqual(launch.canonical_app('omni'), 'omnigent')
+        self.assertEqual(launch.canonical_app('omnigent'), 'omnigent')
+        self.assertEqual(launch.canonical_app('claude'), 'claude')
+        self.assertTrue(launch.is_non_interactive('omni', ['doctor']))
+        self.assertTrue(launch.is_non_interactive('omni', ['claude', '-p']))
+        self.assertFalse(launch.is_non_interactive('omni', ['claude']))
+        self.assertTrue(launch.runs_own_terminal('omni', ['agy']))
+        self.assertIn('omni', shell_setup.SHELL_BLOCK)
 
     def test_agy_keeps_its_own_terminal(self):
         # agy is interactive, but omnigent runs it on its own tmux server,

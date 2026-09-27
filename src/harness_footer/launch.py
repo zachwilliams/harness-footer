@@ -52,6 +52,9 @@ OMNIGENT_HARNESSES = frozenset({
 # tmux in tmux, and the footer's pane would hold omnigent rather than the
 # harness, so let them through untouched.
 OMNIGENT_OWN_TERMINAL = frozenset({'agy'})
+# Omnigent installs two console scripts for the same CLI, so both names have
+# to be wrapped or the short one silently bypasses the footer.
+APP_ALIASES = {'omni': 'omnigent'}
 NON_INTERACTIVE_SWITCHES = {
     'codex': frozenset({'-h', '--help', '--version', '-V'}),
     'claude': frozenset({
@@ -105,6 +108,10 @@ FORWARDED_ENVIRONMENT = (
 CLAUDE_SETTING_SOURCES = frozenset({'user', 'project', 'local'})
 
 
+def canonical_app(app):
+    return APP_ALIASES.get(app, app)
+
+
 def nested_harness(args):
     """Return the harness omnigent will launch, and its own arguments."""
     for i, arg in enumerate(args):
@@ -121,7 +128,7 @@ def nested_harness(args):
 
 def runs_own_terminal(app, args):
     """Return True if the CLI brings its own tmux, so the footer stays out."""
-    if app != 'omnigent':
+    if canonical_app(app) != 'omnigent':
         return False
     nested = nested_harness(args)
     return bool(nested) and nested[0] in OMNIGENT_OWN_TERMINAL
@@ -129,6 +136,7 @@ def runs_own_terminal(app, args):
 
 def is_non_interactive(app, args):
     """Return True if args run a subcommand, print mode, help or version."""
+    app = canonical_app(app)
     if app == 'omnigent':
         nested = nested_harness(args)
         if nested:
@@ -278,6 +286,7 @@ def claude_arguments(args, token):
 
 def run_in_current_pane(app, executable, args):
     token = uuid.uuid4().hex
+    app = canonical_app(app)
     if app == 'codex':
         app_args = ['--no-daemon', '-c', 'tui.status_line=[]', *args]
     elif app == 'omnigent':

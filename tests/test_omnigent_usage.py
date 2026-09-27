@@ -1,12 +1,16 @@
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from harness_footer import omnigent_usage
-from tests.fixtures import claude_payload
+from harness_footer.common import DEFAULTS
+from harness_footer.render import render, strip_styles
+from tests.fixtures import claude_payload, isolated_environment
 
 
 def write_bridge(root, harness, bridge_id, name, record):
@@ -70,6 +74,59 @@ class OmnigentUsageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             self.assertEqual(self.state(root), {})
 
+    def test_remote_sessions_are_marked_in_the_harness_name(self):
+        state = {'app': 'claude', 'launcher': 'omnigent'}
+        local = strip_styles(render(state, '/tmp/p', '', DEFAULTS))
+        remote = strip_styles(
+            render(
+                state | {'remote': 'omni.example.com'}, '/tmp/p', '', DEFAULTS
+            )
+        )
+        self.assertIn('omnigent:claude', local)
+        self.assertNotIn('↗', local)
+        self.assertIn('omnigent↗:claude', remote)
+
+    def test_remote_server_needs_a_live_server_daemon(self):
+        cases = [
+            (
+                {
+                    'mode': 'server',
+                    'server_url': 'https://o.example.com',
+                    'pid': os.getpid(),
+                },
+                'o.example.com',
+            ),
+            (
+                {
+                    'mode': 'local',
+                    'server_url': 'https://o.example.com',
+                    'pid': os.getpid(),
+                },
+                None,
+            ),
+            # A recorded daemon that is no longer running means no server.
+            (
+                {
+                    'mode': 'server',
+                    'server_url': 'https://o.example.com',
+                    'pid': 2**30,
+                },
+                None,
+            ),
+            ({'mode': 'server', 'pid': os.getpid()}, None),
+        ]
+        for record, expected in cases:
+            with tempfile.TemporaryDirectory() as home:
+                daemons = Path(home, 'daemons')
+                daemons.mkdir()
+                (daemons / 'host.json').write_text(json.dumps(record))
+                with patch.object(
+                    omnigent_usage, 'omnigent_home', return_value=Path(home)
+                ):
+                    self.assertEqual(
+                        omnigent_usage.remote_server(), expected, record
+                    )
+
     def test_bridge_roots_match_the_uid_directory_only(self):
         with tempfile.TemporaryDirectory() as parent:
             mine = Path(parent, f'omnigent-{os.getuid()}')
@@ -82,6 +139,65 @@ class OmnigentUsageTests(unittest.TestCase):
                 roots = omnigent_usage.bridge_roots()
         self.assertIn(mine, roots)
         self.assertNotIn(Path(parent, 'omnigent-terminal-abc123'), roots)
+
+
+@unittest.skipUnless(shutil.which('tmux'), 'tmux is not installed')
+class InnerStatusBarTests(unittest.TestCase):
+    """Omnigent gives each harness its own tmux server and status bar."""
+
+    def start_server(self, socket):
+        run = ['tmux', '-S', socket, '-f', os.devnull]
+        subprocess.run(
+            [*run, 'new-session', '-d', 'sleep 60'],
+            check=True,
+            capture_output=True,
+        )
+        self.addCleanup(
+            subprocess.run, [*run, 'kill-server'], capture_output=True
+        )
+        subprocess.run(
+            [*run, 'set-option', '-g', 'status', 'on'],
+            check=True,
+            capture_output=True,
+        )
+
+    def status(self, socket):
+        result = subprocess.run(
+            ['tmux', '-S', socket, 'show-options', '-g', 'status'],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    def test_only_the_recorded_tmux_server_is_silenced(self):
+        with tempfile.TemporaryDirectory() as temp:
+            ours = str(Path(temp, 'ours.sock'))
+            theirs = str(Path(temp, 'theirs.sock'))
+            self.start_server(ours)
+            self.start_server(theirs)
+            bridge = Path(temp, 'bridge')
+            bridge.mkdir()
+            (bridge / 'tmux.json').write_text(
+                json.dumps({'socket_path': ours})
+            )
+            with patch.dict(os.environ, isolated_environment(temp)):
+                omnigent_usage.hide_inner_status_bar(
+                    {'bridge_dir': str(bridge)}
+                )
+            self.assertEqual(self.status(ours), 'status off')
+            # An omnigent session running outside the footer keeps its bar.
+            self.assertEqual(self.status(theirs), 'status on')
+
+    def test_a_bridge_with_no_tmux_server_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bridge = Path(temp, 'bridge')
+            bridge.mkdir()
+            with patch.dict(os.environ, isolated_environment(temp)):
+                omnigent_usage.hide_inner_status_bar(
+                    {'bridge_dir': str(bridge)}
+                )
+                omnigent_usage.hide_inner_status_bar({})
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ usage: harness-footer <command> [arguments]
 commands:
   claude [args]   run Claude Code with the footer
   codex [args]    run Codex CLI with the footer
-  omnigent [args] run Omnigent with the footer
+  omnigent [args] run Omnigent with the footer (also: omni)
   status          print the footer line (try: status --demo 173000 --plain)
   setup           add the harness shell functions to your shell
   claude-status   Claude's statusLine command, used internally
@@ -23,7 +23,7 @@ def main(argv=None):
         print(USAGE, end='')
         return
     command, args = argv[0], argv[1:]
-    if command in launch.SUBCOMMANDS:
+    if command in launch.SUBCOMMANDS or command in launch.APP_ALIASES:
         launch.main(command, args)
     elif command == 'status':
         footer.main(args)

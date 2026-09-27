@@ -24,6 +24,7 @@ WARN_PERCENT = 50
 ALERT_PERCENT = 80
 CONTEXT_BAR_WIDTH = 20
 QUOTA_BAR_WIDTH = 10
+REMOTE_MARKER = '↗'
 CONTEXT_ALERT_FRACTION = 0.9
 CLAUDE_MODEL_ID = re.compile(
     r'claude-(opus|sonnet|haiku|fable)-(\d+)(?:[-.](\d{1,2}))?(?:[-@]|$)'
@@ -201,7 +202,9 @@ def render(state, cwd, git, config, width=200):
     app = state.get('app') or 'codex'
     launcher = state.get('launcher')
     if launcher and launcher != app:
-        app = f'{launcher}:{app}'
+        # The arrow marks a launcher driven by a remote omnigent server.
+        marker = REMOTE_MARKER if state.get('remote') else ''
+        app = f'{launcher}{marker}:{app}'
     model = model_name(state)
     window = non_negative_number(state.get('window'))
     if window:

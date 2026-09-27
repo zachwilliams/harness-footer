@@ -1,4 +1,5 @@
 {
   "context_threshold": 200000,
-  "claude_forward_status_line": true
+  "claude_forward_status_line": true,
+  "omnigent_hide_inner_status": true
 }

@@ -17,6 +17,7 @@ SHELL_BLOCK = f"""{BEGIN_MARKER}
 claude() {{ harness-footer claude "$@"; }}
 codex() {{ harness-footer codex "$@"; }}
 omnigent() {{ harness-footer omnigent "$@"; }}
+omni() {{ harness-footer omni "$@"; }}
 {END_MARKER}
 """
 

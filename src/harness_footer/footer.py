@@ -16,7 +16,11 @@ from harness_footer.common import (
     load_settings,
     read_json,
 )
-from harness_footer.omnigent_usage import LAUNCHER, omnigent_state
+from harness_footer.omnigent_usage import (
+    LAUNCHER,
+    hide_inner_status_bar,
+    omnigent_state,
+)
 from harness_footer.render import render, strip_styles, style
 
 
@@ -59,6 +63,8 @@ def pane_state(socket, pane):
         state = omnigent_state(cwd) or codex_state(int(pid))
         if not state:
             return {'app': LAUNCHER}, cwd
+        if load_settings()['omnigent_hide_inner_status']:
+            hide_inner_status_bar(state)
         return state | {'launcher': LAUNCHER}, cwd
     return codex_state(int(pid)), cwd
 

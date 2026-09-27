@@ -15,7 +15,7 @@ claude | Opus 5.5 (1m) | project | [main]* | ctx[███░│░░░░░�
 
 | Segment | Example | What it shows |
 | --- | --- | --- |
-| Harness | `claude` | The CLI running in this pane: `claude`, `codex`, or `omnigent:<harness>` |
+| Harness | `claude` | The CLI running in this pane: `claude`, `codex`, or `omnigent:<harness>`; `omnigent↗` means a remote omnigent server |
 | Model | `Opus 5.5 (1m)` | Model name and context window size |
 | Working directory | `project` | Name of the current directory |
 | Git branch | `[main]*` | Current branch; `*` means uncommitted changes |
@@ -61,14 +61,18 @@ up the file first:
 claude() { harness-footer claude "$@"; }
 codex() { harness-footer codex "$@"; }
 omnigent() { harness-footer omnigent "$@"; }
+omni() { harness-footer omni "$@"; }
 # <<< harness-footer <<<
 ```
+
+Omnigent installs `omni` and `omnigent` as two names for the same CLI, so
+both are wrapped; wrapping only one lets the other slip past the footer.
 
 The functions are always defined; one for a CLI you don't have just reports
 that it isn't on PATH. Use `--shell bash` or `--shell zsh` to pick the shell,
 `--shell-rc PATH` to edit a different startup file, or `--print` to print the
 lines and add them yourself. To skip the footer for one run, use
-`command claude`, `command codex` or `command omnigent`.
+`command claude`, `command codex`, `command omnigent` or `command omni`.
 
 ## Settings
 
@@ -79,6 +83,7 @@ lines and add them yourself. To skip the footer for one run, use
 | --- | --- | --- |
 | `context_threshold` | `200000` | Tokens at which the context bar turns yellow |
 | `claude_forward_status_line` | `true` | Set to `false` to stop running your own `statusLine` command |
+| `omnigent_hide_inner_status` | `true` | Set to `false` to keep omnigent's own status bar inside the footer |
 
 `claude_forward_status_line` only affects sessions launched through
 harness-footer, and only if you have a `statusLine` command of your own. To
@@ -174,6 +179,22 @@ with `tmux -L harness-footer source-file src/harness_footer/tmux.conf`.
 The footer is skipped for help, version, admin subcommands, `codex exec`,
 `claude -p`, `omnigent agy`, redirected input or output, and Claude's
 background, cloud, bare and safe modes.
+
+### Omnigent server mode
+
+With a `server:` in `~/.omnigent/config.yaml`, omnigent runs every harness on
+a private tmux server of its own rather than as a child of your shell, and
+that server carries a status bar. Inside the footer's session that would
+stack two bars, so the footer silences the inner one. It silences only the
+tmux server recorded in the session's own `tmux.json`, so omnigent sessions
+running outside the footer keep their bar. Set `omnigent_hide_inner_status`
+to `false` to leave them all alone.
+
+The harness still runs on this machine in that mode -- the remote server is
+the control plane, not the executor -- so the bridge context file is local and
+the footer reads it as usual. Sessions driven by a remote server are marked
+with an arrow on the launcher, `omnigent↗:claude`, taken from the live host
+daemon in `~/.omnigent/daemons/`.
 
 ### Omnigent coverage
 

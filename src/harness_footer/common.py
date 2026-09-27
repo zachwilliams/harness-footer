@@ -15,6 +15,7 @@ SELF_COMMAND = (sys.executable, '-P', '-m', 'harness_footer')
 DEFAULTS = {
     'context_threshold': 200_000,
     'claude_forward_status_line': True,
+    'omnigent_hide_inner_status': True,
 }
 # Settings files written before this key was renamed still use the old name.
 LEGACY_SETTING_NAMES = {
