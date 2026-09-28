@@ -26,6 +26,8 @@ MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
 
 PANE_APP_OPTION = '@harness-footer-app'
 PANE_TOKEN_OPTION = '@harness-footer-token'
+# The harness omnigent launched in the pane, such as `codex`.
+PANE_HARNESS_OPTION = '@harness-footer-harness'
 
 
 def command_output(args, timeout=2):

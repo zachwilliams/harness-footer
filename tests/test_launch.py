@@ -1,5 +1,7 @@
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from harness_footer import launch, shell_setup
@@ -57,6 +59,30 @@ class LaunchTests(unittest.TestCase):
         self.assertFalse(launch.is_non_interactive('omni', ['claude']))
         self.assertTrue(launch.runs_own_terminal('omni', ['agy']))
         self.assertIn('omni', shell_setup.SHELL_BLOCK)
+
+    def test_omnigent_codex_runs_through_the_editor_bootstrap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory, 'omni')
+            script.write_text('#!/opt/omnigent/bin/python3.14\nimport sys\n')
+            command = launch.omnigent_command(
+                str(script), ['codex', '-m', 'x']
+            )
+            self.assertEqual(
+                command[:2], ['/opt/omnigent/bin/python3.14', '-P']
+            )
+            self.assertTrue(command[2].endswith('omnigent_bootstrap.py'))
+            self.assertEqual(command[3:], [str(script), 'codex', '-m', 'x'])
+            # Other harnesses, and scripts it cannot run directly, exec as is.
+            for args in (['claude'], []):
+                self.assertEqual(
+                    launch.omnigent_command(str(script), args),
+                    [str(script), *args],
+                )
+            script.write_text('#!/bin/sh\nexec python "$0" "$@"\n')
+            self.assertEqual(
+                launch.omnigent_command(str(script), ['codex']),
+                [str(script), 'codex'],
+            )
 
     def test_agy_keeps_its_own_terminal(self):
         # agy is interactive, but omnigent runs it on its own tmux server,

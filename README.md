@@ -197,11 +197,20 @@ the session's `tmux.json`; the other harnesses name none, and are matched to
 one by the runner pid recorded in both the bridge directory and the terminal
 directory. Set `omnigent_hide_inner_status` to `false` to leave them alone.
 
-The harness still runs on this machine in that mode -- the remote server is
-the control plane, not the executor -- so the bridge context file is local and
-the footer reads it as usual. Sessions driven by a remote server are marked
-with an arrow on the launcher, `omnigent↗:claude`, taken from the live host
-daemon in `~/.omnigent/daemons/`.
+Where the harness actually runs varies, and it decides what the footer can
+show. When the runner is local the bridge directory is local too, and the
+footer reads usage as usual. When the session runs on another host there is no
+local bridge, so the footer shows the harness name, directory and branch but
+`ctx: awaiting usage`; reading usage for those would need the data off that
+host. Either way the session is marked with an arrow on the launcher,
+`omnigent↗:claude`, whenever the live host daemon in `~/.omnigent/daemons/` is
+bound to a server.
+
+Environment variables are a related trap. A remotely executed harness inherits
+the environment of the host daemon on *that* machine, not your shell, so
+things like `$EDITOR` and `$VISUAL` have to be set there. Codex refuses its
+external-editor key outright when they are unset; Claude quietly falls back to
+`vi`, which is why only Codex complains.
 
 ### Omnigent coverage
 

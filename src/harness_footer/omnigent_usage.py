@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from harness_footer.claude_usage import claude_context_tokens, claude_state
+from harness_footer.codex_usage import read_rollout
 from harness_footer.common import (
     cache_dir,
     command_output,
@@ -37,6 +38,8 @@ SILENCED_CACHE = 'omnigent-silenced.json'
 BRIDGE_ID = re.compile(r'[0-9a-f]{32}\Z')
 # Files naming the directory a bridge's harness is working in.
 WORKSPACE_FIELDS = (('state.json', 'cwd'), ('bridge.json', 'workspace'))
+# Launch names whose bridge directory is named differently.
+BRIDGE_HARNESS = {'agy': 'antigravity'}
 
 
 def omnigent_home():
@@ -62,11 +65,12 @@ def bridge_roots():
     return sorted(set(roots))
 
 
-def bridge_dirs():
+def bridge_dirs(harness=None):
     """Return (harness, directory) for every omnigent bridge on disk."""
+    pattern = f'{BRIDGE_HARNESS.get(harness, harness) or "*"}-native'
     found = []
     for root in bridge_roots():
-        for harness_dir in sorted(root.glob('*-native')):
+        for harness_dir in sorted(root.glob(pattern)):
             harness = harness_dir.name.removesuffix('-native')
             try:
                 bridges = sorted(harness_dir.iterdir())
@@ -80,14 +84,14 @@ def bridge_dirs():
     return found
 
 
-def context_files():
+def context_files(harness=None):
     """Return (harness, path) for every bridge context file on disk."""
     found = []
-    for harness, bridge in bridge_dirs():
-        for name in CONTEXT_FILES:
-            path = bridge / name
+    for name, bridge in bridge_dirs(harness):
+        for file_name in CONTEXT_FILES:
+            path = bridge / file_name
             if path.is_file():
-                found.append((harness, path))
+                found.append((name, path))
                 break  # One record per bridge, raw preferred.
     return found
 
@@ -125,10 +129,10 @@ def bridge_workspace(bridge):
     return None
 
 
-def bridge_for_cwd(cwd):
+def bridge_for_cwd(cwd, harness=None):
     """Return the bridge directory whose harness is working in cwd."""
     best, best_rank = None, None
-    for _, bridge in bridge_dirs():
+    for _, bridge in bridge_dirs(harness):
         try:
             modified = bridge.stat().st_mtime_ns
         except OSError:
@@ -184,7 +188,7 @@ def remote_server():
     return None
 
 
-def hide_inner_status_bar(cwd=None):
+def hide_inner_status_bar(cwd=None, harness=None):
     """Turn off the status bar of the tmux server omnigent runs this on.
 
     In server mode omnigent gives each harness a private tmux server with a
@@ -199,7 +203,7 @@ def hide_inner_status_bar(cwd=None):
     silenced = set(read_json(cache_path).get('sockets') or [])
     if all(str(t / 'tmux.sock') in silenced for t in terminals):
         return
-    bridge = bridge_for_cwd(cwd)
+    bridge = bridge_for_cwd(cwd, harness)
     socket = inner_tmux_socket(bridge) if bridge else None
     # tmux refuses a socket with no server rather than starting one, but
     # skipping the call keeps a dead path out of the cache.
@@ -235,10 +239,48 @@ def bridge_state(harness, record):
     return normalized_state(harness, record)
 
 
-def omnigent_state(cwd=None):
-    """Return usage from the bridge whose harness is working in cwd."""
+def codex_bridge_state(cwd=None):
+    """Return usage from the rollout of the codex bridge working in cwd.
+
+    Omnigent runs codex as an app-server under its host daemon, outside
+    this pane's process tree, and writes no context file for it. The
+    rollout still lands in the bridge's private CODEX_HOME, named for the
+    thread the bridge records.
+    """
+    bridge = bridge_for_cwd(cwd, 'codex')
+    if not bridge:
+        return {}
+    record = read_json(bridge / 'state.json')
+    thread, home = record.get('thread_id'), record.get('codex_home')
+    if not thread or not home:
+        return {}
+    pattern = f'rollout-*-{thread}.jsonl'
+    rollouts = sorted(Path(home, 'sessions').rglob(pattern))
+    if not rollouts:
+        return {}
+    state = read_rollout(rollouts[-1], cache_dir())
+    return state | {'app': 'codex', 'launcher': LAUNCHER}
+
+
+def omnigent_state(cwd=None, harness=None):
+    """Return usage from the bridge whose harness is working in cwd.
+
+    harness is the one omnigent launched in this pane, when known, so a
+    newer bridge of another harness cannot stand in for it.
+    """
+    if harness == 'codex':
+        best = codex_bridge_state(cwd)
+    else:
+        best = context_state(cwd, harness)
+    if best:
+        best['remote'] = remote_server()
+    return best
+
+
+def context_state(cwd=None, harness=None):
+    """Return usage from the newest bridge context file, cwd's first."""
     best, best_rank = {}, None
-    for harness, path in context_files():
+    for name, path in context_files(harness):
         record = read_json(path)
         if not isinstance(record, dict) or not record:
             continue
@@ -246,12 +288,10 @@ def omnigent_state(cwd=None):
             modified = path.stat().st_mtime_ns
         except OSError:
             continue
-        state = bridge_state(harness, record)
+        state = bridge_state(name, record)
         # Several harnesses can be live at once, so prefer the one whose
         # own payload reports the directory this pane is sitting in.
         rank = (bool(cwd) and state.get('cwd') == cwd, modified)
         if best_rank is None or rank > best_rank:
             best, best_rank = state, rank
-    if best:
-        best['remote'] = remote_server()
     return best

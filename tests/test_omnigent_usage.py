@@ -22,11 +22,11 @@ def write_bridge(root, harness, bridge_id, name, record):
 
 
 class OmnigentUsageTests(unittest.TestCase):
-    def state(self, root, cwd=None):
+    def state(self, root, cwd=None, harness=None):
         with patch.object(
             omnigent_usage, 'bridge_roots', return_value=[Path(root)]
         ):
-            return omnigent_usage.omnigent_state(cwd)
+            return omnigent_usage.omnigent_state(cwd, harness)
 
     def test_raw_capture_keeps_rate_limits_and_names_the_launcher(self):
         with tempfile.TemporaryDirectory() as root:
@@ -69,6 +69,57 @@ class OmnigentUsageTests(unittest.TestCase):
             state = self.state(root, cwd='/tmp/mine')
         self.assertEqual(state['cwd'], '/tmp/mine')
         self.assertEqual(state['context'], 10_000)
+
+    def test_the_pane_harness_ignores_other_harness_bridges(self):
+        with tempfile.TemporaryDirectory() as root:
+            write_bridge(root, 'cursor', 'e' * 32, 'context.json', {'x': 1})
+            # Newer, so it would win if the harness were not known.
+            write_bridge(
+                root, 'claude', 'f' * 32, 'context_raw.json', claude_payload()
+            )
+            self.assertEqual(
+                self.state(root, harness='cursor')['app'], 'cursor'
+            )
+            self.assertEqual(self.state(root)['app'], 'claude')
+
+    def test_codex_is_read_from_the_rollout_in_its_bridge(self):
+        thread = '01a0e9d4-e87b-7ec0-ade9-4b82ca303062'
+        with tempfile.TemporaryDirectory() as root:
+            # A claude bridge with a context file must not stand in for it.
+            write_bridge(
+                root, 'claude', 'a' * 32, 'context_raw.json', claude_payload()
+            )
+            home = Path(root, 'codex-home')
+            sessions = home / 'sessions' / '2026' / '09' / '28'
+            sessions.mkdir(parents=True)
+            events = [
+                {'type': 'turn_context', 'payload': {'model': 'gpt-6'}},
+                {
+                    'type': 'event_msg',
+                    'payload': {
+                        'type': 'token_count',
+                        'info': {
+                            'last_token_usage': {'total_tokens': 15_000},
+                            'model_context_window': 258_000,
+                        },
+                    },
+                },
+            ]
+            rollout = sessions / f'rollout-2026-09-28T17-03-59-{thread}.jsonl'
+            rollout.write_text(''.join(json.dumps(e) + '\n' for e in events))
+            state_record = {
+                'thread_id': thread,
+                'codex_home': str(home),
+                'cwd': '/tmp/p',
+            }
+            write_bridge(root, 'codex', 'b' * 32, 'state.json', state_record)
+            with patch.dict(os.environ, isolated_environment(root)):
+                state = self.state(root, cwd='/tmp/p', harness='codex')
+        self.assertEqual(state['app'], 'codex')
+        self.assertEqual(state['launcher'], 'omnigent')
+        self.assertEqual(state['model'], 'gpt-6')
+        self.assertEqual(state['context'], 15_000)
+        self.assertEqual(state['window'], 258_000)
 
     def test_no_bridge_directory_reports_nothing(self):
         with tempfile.TemporaryDirectory() as root:

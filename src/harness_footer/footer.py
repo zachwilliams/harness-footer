@@ -9,6 +9,7 @@ from harness_footer.codex_usage import codex_state, read_rollout
 from harness_footer.common import (
     MINUTES_PER_DAY,
     PANE_APP_OPTION,
+    PANE_HARNESS_OPTION,
     PANE_TOKEN_OPTION,
     cache_dir,
     command_output,
@@ -47,22 +48,25 @@ def pane_state(socket, pane):
     pane_format = '\t'.join(
         [
             '#{pane_pid}',
-            '#{pane_current_path}',
             f'#{{{PANE_APP_OPTION}}}',
             f'#{{{PANE_TOKEN_OPTION}}}',
+            f'#{{{PANE_HARNESS_OPTION}}}',
+            # Last and never empty, so stripping the output drops no field.
+            '#{pane_current_path}',
         ]
     )
     query = ['display-message', '-p', '-t', pane, pane_format]
     fields = command_output(['tmux', '-S', socket, *query])
-    pid, cwd, app, token = fields.split('\t')
+    pid, app, token, harness, cwd = fields.split('\t')
     if app == 'claude' and is_valid_token(token):
         return cached_claude_state(token), cwd
     if app == LAUNCHER:
         # `omnigent codex` still runs a real codex, so its rollout is the
         # fallback for the harnesses that write no bridge context file.
+        harness = harness or None
         if load_settings()['omnigent_hide_inner_status']:
-            hide_inner_status_bar(cwd)
-        state = omnigent_state(cwd) or codex_state(int(pid))
+            hide_inner_status_bar(cwd, harness)
+        state = omnigent_state(cwd, harness) or codex_state(int(pid))
         if not state:
             return {'app': LAUNCHER}, cwd
         return state | {'launcher': LAUNCHER}, cwd

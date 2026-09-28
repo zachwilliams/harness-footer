@@ -12,6 +12,7 @@ from pathlib import Path
 from harness_footer.common import (
     PACKAGE_DIR,
     PANE_APP_OPTION,
+    PANE_HARNESS_OPTION,
     PANE_TOKEN_OPTION,
     SELF_COMMAND,
     command_output,
@@ -179,11 +180,12 @@ def tmux(*args):
     return subprocess.check_output([TMUX, *args], text=True).strip()
 
 
-def configure_tmux(app, token):
+def configure_tmux(app, token, harness=''):
     pane = os.environ['TMUX_PANE']
     session = tmux('display-message', '-p', '-t', pane, '#{session_id}')
     tmux('set-option', '-p', '-t', pane, PANE_APP_OPTION, app)
     tmux('set-option', '-p', '-t', pane, PANE_TOKEN_OPTION, token)
+    tmux('set-option', '-p', '-t', pane, PANE_HARNESS_OPTION, harness)
     footer = shlex.join([*SELF_COMMAND, 'status'])
     command = (
         f'{footer} --socket #{{q:socket_path}} --pane #{{pane_id}}'
@@ -288,19 +290,49 @@ def claude_arguments(args, token):
     return ['--settings', json.dumps(explicit), *remaining]
 
 
+def python_interpreter(script):
+    """Return the Python a console script runs under, from its shebang."""
+    try:
+        with open(script, 'rb') as file:
+            first_line = file.readline().decode().strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    interpreter = first_line.removeprefix('#!').strip()
+    # Launcher shebangs such as `#!/bin/sh` or `#!/usr/bin/env python` are
+    # left alone; only a direct interpreter path can run the bootstrap.
+    if not first_line.startswith('#!') or ' ' in interpreter:
+        return None
+    if not Path(interpreter).name.startswith('python'):
+        return None
+    return interpreter
+
+
+def omnigent_command(executable, args):
+    """Return the command that runs omnigent with args."""
+    nested = nested_harness(args)
+    interpreter = python_interpreter(executable)
+    if not nested or nested[0] != 'codex' or not interpreter:
+        return [executable, *args]
+    bootstrap = str(PACKAGE_DIR / 'omnigent_bootstrap.py')
+    return [interpreter, '-P', bootstrap, executable, *args]
+
+
 def run_in_current_pane(app, executable, args):
     token = uuid.uuid4().hex
     app = canonical_app(app)
+    harness = ''
     if app == 'codex':
-        app_args = ['--no-daemon', '-c', 'tui.status_line=[]', *args]
+        command = [executable, '--no-daemon', '-c', 'tui.status_line=[]']
+        command += args
     elif app == 'omnigent':
         # Omnigent installs its own statusLine wrapper and owns Claude's
         # single --settings value, so the footer reads its bridge instead.
-        app_args = list(args)
+        command = omnigent_command(executable, args)
+        harness = (nested_harness(args) or ('',))[0]
     else:
-        app_args = claude_arguments(args, token)
-    configure_tmux(app, token)
-    os.execv(executable, [executable, *app_args])
+        command = [executable, *claude_arguments(args, token)]
+    configure_tmux(app, token, harness)
+    os.execv(command[0], command)
 
 
 def run_in_new_session(app, args):
