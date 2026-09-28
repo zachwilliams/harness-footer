@@ -95,6 +95,10 @@ OPTIONAL_VALUE_FLAGS = {
     }),
 }  # fmt: skip
 FORWARDED_ENVIRONMENT = (
+    # Codex and Claude open an external editor from these, and a tmux server
+    # started before they were exported would otherwise never see them.
+    'EDITOR',
+    'VISUAL',
     'ITERM_SESSION_ID',
     'ITERM_PROFILE',
     'TERM_PROGRAM',

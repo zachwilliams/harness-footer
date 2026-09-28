@@ -157,6 +157,10 @@ outside tmux:
   see output inside tmux. Hold Option in iTerm2 for native text selection.
 - Notifications, clipboard writes, focus changes and window titles reach the
   terminal.
+- `$EDITOR` and `$VISUAL` are forwarded, so the CLIs' external-editor key
+  (Ctrl+G in Codex) works. Omnigent spawns its harnesses from its own host
+  daemon rather than your shell, so for `omni` they have to be set where
+  that daemon can see them -- on macOS, `launchctl setenv`.
 
 Inside your own tmux session, harness-footer runs in the current pane. It sets
 that session's `status`, `status-position`, `status-interval`, `status-style`
