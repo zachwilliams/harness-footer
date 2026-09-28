@@ -308,10 +308,13 @@ def python_interpreter(script):
 
 
 def omnigent_command(executable, args):
-    """Return the command that runs omnigent with args."""
-    nested = nested_harness(args)
+    """Return the command that runs omnigent with args.
+
+    Any wrapped launch may be the one that spawns omnigent's host daemon,
+    so every one goes through the bootstrap that hands it the editor.
+    """
     interpreter = python_interpreter(executable)
-    if not nested or nested[0] != 'codex' or not interpreter:
+    if not interpreter:
         return [executable, *args]
     bootstrap = str(PACKAGE_DIR / 'omnigent_bootstrap.py')
     return [interpreter, '-P', bootstrap, executable, *args]

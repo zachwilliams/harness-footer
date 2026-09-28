@@ -21,6 +21,7 @@ from harness_footer.omnigent_usage import (
     LAUNCHER,
     hide_inner_status_bar,
     omnigent_state,
+    remote_server,
 )
 from harness_footer.render import render, strip_styles, style
 
@@ -68,7 +69,9 @@ def pane_state(socket, pane):
             hide_inner_status_bar(cwd, harness)
         state = omnigent_state(cwd, harness) or codex_state(int(pid))
         if not state:
-            return {'app': LAUNCHER}, cwd
+            # Nothing is written until the harness's first turn, but the
+            # name and server are already known, so show them meanwhile.
+            state = {'app': harness or LAUNCHER, 'remote': remote_server()}
         return state | {'launcher': LAUNCHER}, cwd
     return codex_state(int(pid)), cwd
 

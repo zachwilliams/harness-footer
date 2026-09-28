@@ -60,7 +60,7 @@ class LaunchTests(unittest.TestCase):
         self.assertTrue(launch.runs_own_terminal('omni', ['agy']))
         self.assertIn('omni', shell_setup.SHELL_BLOCK)
 
-    def test_omnigent_codex_runs_through_the_editor_bootstrap(self):
+    def test_omnigent_runs_through_the_editor_bootstrap(self):
         with tempfile.TemporaryDirectory() as directory:
             script = Path(directory, 'omni')
             script.write_text('#!/opt/omnigent/bin/python3.14\nimport sys\n')
@@ -72,12 +72,10 @@ class LaunchTests(unittest.TestCase):
             )
             self.assertTrue(command[2].endswith('omnigent_bootstrap.py'))
             self.assertEqual(command[3:], [str(script), 'codex', '-m', 'x'])
-            # Other harnesses, and scripts it cannot run directly, exec as is.
-            for args in (['claude'], []):
-                self.assertEqual(
-                    launch.omnigent_command(str(script), args),
-                    [str(script), *args],
-                )
+            # Any launch may spawn the daemon, so claude goes through it too.
+            claude = launch.omnigent_command(str(script), ['claude'])
+            self.assertEqual(claude[3:], [str(script), 'claude'])
+            # A script it cannot run directly is exec'd as is.
             script.write_text('#!/bin/sh\nexec python "$0" "$@"\n')
             self.assertEqual(
                 launch.omnigent_command(str(script), ['codex']),

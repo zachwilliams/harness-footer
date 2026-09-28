@@ -1,13 +1,16 @@
-"""Run an omnigent console script so its codex terminal keeps the editor.
+"""Run an omnigent console script so its harness terminals keep the editor.
 
 Usage: python -P omnigent_bootstrap.py OMNIGENT_SCRIPT [ARGS...]
 
 This runs under omnigent's own interpreter, so it must not import
-harness_footer. Omnigent builds the codex TUI's environment from its host
-daemon, which keeps only an allowlist, plus the few variables
-`codex_terminal_env` copies from this process. EDITOR and VISUAL are in
-neither, so Ctrl+G in codex fails. Adding them to that function's result
-restores it; if omnigent renames the function, the launch runs unchanged.
+harness_footer. Omnigent's harness terminals are started by runners under
+its host daemon, and the CLI gives that daemon only an allowlisted
+environment. EDITOR and VISUAL are not on it, so Ctrl+G fails in codex
+(Claude quietly falls back to vi). Adding them to the daemon environment,
+and naming them in the runner passthrough list, carries them through to
+every terminal. The daemon is long-lived, so this only takes effect for a
+daemon spawned by a wrapped launch. If omnigent renames the function, the
+launch runs unchanged.
 """
 
 import os
@@ -15,24 +18,28 @@ import runpy
 import sys
 
 EDITOR_VARIABLES = ('EDITOR', 'VISUAL')
+PASSTHROUGH = 'OMNIGENT_RUNNER_ENV_PASSTHROUGH'
 
 
 def keep_editor():
+    editor = {k: os.environ[k] for k in EDITOR_VARIABLES if k in os.environ}
+    if not editor:
+        return
     try:
-        from omnigent.harnesses.codex_native import main
+        from omnigent import cli
     except Exception:
         return
-    original = getattr(main, 'codex_terminal_env', None)
+    original = getattr(cli, '_build_host_daemon_env', None)
     if not callable(original):
         return
 
-    def codex_terminal_env(*args, **kwargs):
-        editor = {
-            k: os.environ[k] for k in EDITOR_VARIABLES if k in os.environ
-        }
-        return editor | original(*args, **kwargs)
+    def build_host_daemon_env(*args, **kwargs):
+        env = original(*args, **kwargs)
+        names = [n for n in env.get(PASSTHROUGH, '').split(',') if n]
+        names += [name for name in editor if name not in names]
+        return env | editor | {PASSTHROUGH: ','.join(names)}
 
-    main.codex_terminal_env = codex_terminal_env
+    cli._build_host_daemon_env = build_host_daemon_env
 
 
 if __name__ == '__main__':
