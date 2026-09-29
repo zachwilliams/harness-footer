@@ -62,6 +62,8 @@ claude() { harness-footer claude "$@"; }
 codex() { harness-footer codex "$@"; }
 omnigent() { harness-footer omnigent "$@"; }
 omni() { harness-footer omni "$@"; }
+unalias ai 2>/dev/null
+ai() { harness-footer ai "$@"; }
 # <<< harness-footer <<<
 ```
 
@@ -73,6 +75,29 @@ that it isn't on PATH. Use `--shell bash` or `--shell zsh` to pick the shell,
 `--shell-rc PATH` to edit a different startup file, or `--print` to print the
 lines and add them yourself. To skip the footer for one run, use
 `command claude`, `command codex`, `command omnigent` or `command omni`.
+
+## Launcher
+
+`ai` opens a one-key menu for omnigent sessions on the server named by
+`server:` in `~/.omnigent/config.yaml`. Every entry passes that server as
+`--server` and runs through the footer.
+
+| Key | Runs |
+| --- | --- |
+| `r` | `omni resume` (picker over your sessions on the server) |
+| `p` | `omni polly` |
+| `d` | `omni debby` |
+| `c` | `omni claude` |
+| `x` | `omni codex` |
+| `a` | `omni agy` |
+
+Pass the key to skip the menu, and anything after it goes to the harness:
+`ai c`, `ai x`, `ai c --resume`. The shell block runs `unalias ai` first, so
+it replaces any `ai` alias defined earlier in your startup file.
+
+`omni run` and `omni polly` open the conversation in a browser unless
+`auto_open_conversation` is false; turn it off with
+`omni config set --global auto_open_conversation=false`.
 
 ## Settings
 

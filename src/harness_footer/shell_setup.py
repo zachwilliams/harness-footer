@@ -18,6 +18,8 @@ claude() {{ harness-footer claude "$@"; }}
 codex() {{ harness-footer codex "$@"; }}
 omnigent() {{ harness-footer omnigent "$@"; }}
 omni() {{ harness-footer omni "$@"; }}
+unalias ai 2>/dev/null
+ai() {{ harness-footer ai "$@"; }}
 {END_MARKER}
 """
 
