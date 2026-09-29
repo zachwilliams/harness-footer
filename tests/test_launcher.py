@@ -69,6 +69,62 @@ class LauncherTests(unittest.TestCase):
             launcher.main(['c'])
         self.assertIn('No omnigent server', str(error.exception))
 
+    def session(self, **fields):
+        base = {
+            'id': 'abc',
+            'title': 't',
+            'agent': 'polly',
+            'status': 'idle',
+            'updated_at': 0,
+            'wrapper': '',
+            'runner_online': False,
+        }
+        return base | fields
+
+    def test_native_sessions_go_through_resume(self):
+        session = self.session(wrapper='codex-native-ui', runner_online=True)
+        self.assertEqual(
+            launcher.session_arguments(session, SERVER),
+            ['resume', 'abc', '--server', SERVER],
+        )
+
+    def test_live_agent_sessions_are_attached(self):
+        session = self.session(status='running', runner_online=True)
+        self.assertEqual(
+            launcher.session_arguments(session, SERVER),
+            ['attach', 'abc', '--server', SERVER],
+        )
+
+    def test_stopped_polly_resumes_through_polly(self):
+        self.assertEqual(
+            launcher.session_arguments(self.session(), SERVER),
+            ['polly', '--resume', 'abc', '--server', SERVER],
+        )
+
+    def test_picker_falls_back_to_omnigent_picker(self):
+        with mock.patch.object(launcher, 'list_sessions', return_value=None):
+            self.assertEqual(
+                launcher.pick_session(SERVER), ['resume', '--server', SERVER]
+            )
+
+    def test_picker_returns_the_chosen_session(self):
+        sessions = [self.session(id='one'), self.session(id='two')]
+        with (
+            mock.patch.object(
+                launcher, 'list_sessions', return_value=sessions
+            ),
+            mock.patch('builtins.input', return_value='2'),
+            mock.patch('builtins.print'),
+        ):
+            args = launcher.pick_session(SERVER)
+        self.assertEqual(args[:2], ['polly', '--resume'])
+        self.assertEqual(args[2], 'two')
+
+    def test_age_is_compact(self):
+        self.assertEqual(launcher.age(0, now=30), 'now')
+        self.assertEqual(launcher.age(0, now=7200), '2h')
+        self.assertEqual(launcher.age(0, now=3 * 86400), '3d')
+
     def test_resume_keeps_the_footer(self):
         args = launcher.omnigent_arguments('r', [], SERVER)
         self.assertFalse(launch.is_non_interactive('omni', args))

@@ -341,6 +341,13 @@ def run_in_current_pane(app, executable, args):
 def run_in_new_session(app, args):
     session = f'{app}-{uuid.uuid4().hex[:8]}'
     command = shlex.join([*SELF_COMMAND, app, INSIDE_TMUX_FLAG, *args])
+    # The session closes when the CLI exits, taking any error message with
+    # it, so hold the pane open after a failure. 130 is a Ctrl+C quit.
+    command += (
+        '; rc=$?; if [ $rc -ne 0 ] && [ $rc -ne 130 ]; then'
+        ' printf "\\n[exited with status %s; press Enter to close]" $rc;'
+        ' read -r _; fi'
+    )
     environment = []
     for key in FORWARDED_ENVIRONMENT:
         if key in os.environ:
